@@ -20,19 +20,35 @@ let saving=false, pendingDraft=null, library=[], mapReady=false, mapFailed=false
 const signature=courseSignature;
 const dirty=()=>signature(course)!==savedSignature;
 const toast=message=>{clearTimeout(toastTimer);$('toast').textContent=message;$('toast').hidden=false;toastTimer=setTimeout(()=>$('toast').hidden=true,6500);};
+const CATEGORY_ICONS={
+  cafe:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 5h7.5v4a3 3 0 0 1-3 3H6a3 3 0 0 1-3-3V5z"/><path d="M10.5 6.5h1.5a1.5 1.5 0 0 1 0 3h-1.5"/><path d="M5 2.5v1.2"/><path d="M8 2.5v1.2"/></svg>',
+  food:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 2.5v3.2a1.3 1.3 0 0 0 2.6 0V2.5"/><path d="M4.8 5.7v7.8"/><path d="M11 2.5v11"/><path d="M11 2.5a2.2 2.2 0 0 1 2.2 2.2v2.5H11"/></svg>',
+  photo:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5a1.5 1.5 0 0 1 1.5-1.5h1.8l1-1.5h3.4l1 1.5h1.8A1.5 1.5 0 0 1 14 5.5v6a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 2 11.5v-6z"/><circle cx="8" cy="8.5" r="2.2"/></svg>',
+  seminar:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="7.5" rx="1"/><path d="M5 5.2h6"/><path d="M5 7.2h3.5"/><path d="M8 10v3.5"/><path d="M5.5 13.5h5"/></svg>',
+  academy:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="8 2.5, 14.5 5.5, 8 8.5, 1.5 5.5"/><path d="M4.5 7.2v3.3c0 1.2 1.6 2.5 3.5 2.5s3.5-1.3 3.5-2.5V7.2"/><path d="M13.5 6.2v4.5"/></svg>',
+  gallery:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2.5" y="2.5" width="11" height="11" rx="1.5"/><circle cx="5.8" cy="5.8" r="1.1" fill="currentColor"/><path d="M3.2 12l3.4-3.8 2.2 2.4 1.8-1.8 2.4 3.2"/></svg>',
+  book:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 4.2v8.8"/><path d="M8 4.2c-1.8-1.2-4.2-1.2-6 0v8.4c1.8-.9 4.2-.9 6 0"/><path d="M8 4.2c1.8-1.2 4.2-1.2 6 0v8.4c-1.8-.9-4.2-.9-6 0"/></svg>',
+  spot:'<svg class="cat-icon" viewBox="0 0 16 16" width="12" height="12" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3.5 2v12"/><path d="M3.5 3h8l-2 3 2 3h-8"/></svg>'
+};
 const CATEGORY_MAP={
-  cafe:{label:'카페',icon:'☕'},
-  food:{label:'식당',icon:'🍽'},
-  photo:{label:'포토스팟',icon:'📷'},
-  seminar:{label:'세미나실',icon:'🏛'},
-  spot:{label:'참고장소',icon:'⚐'}
+  cafe:{label:'카페',icon:CATEGORY_ICONS.cafe},
+  food:{label:'식당',icon:CATEGORY_ICONS.food},
+  photo:{label:'포토스팟',icon:CATEGORY_ICONS.photo},
+  seminar:{label:'세미나실',icon:CATEGORY_ICONS.seminar},
+  academy:{label:'교육·학원',icon:CATEGORY_ICONS.academy},
+  gallery:{label:'전시·갤러리',icon:CATEGORY_ICONS.gallery},
+  book:{label:'서점·도서관',icon:CATEGORY_ICONS.book},
+  spot:{label:'참고장소',icon:CATEGORY_ICONS.spot}
 };
 function inferCategory(text){
   const t=String(text||'').toLowerCase();
   if(/카페|커피|디저트|베이커리|cafe|coffee|tea|bakery/.test(t))return 'cafe';
   if(/식당|음식점|맛집|밥|요리|레스토랑|pub|bar|food|restaurant/.test(t))return 'food';
-  if(/사진|포토|전망|야경|뷰|스냅|풍경|view|photo|spot/.test(t))return 'photo';
-  if(/세미나|회의|스터디|워크숍|강의|미팅|seminar|meeting|study/.test(t))return 'seminar';
+  if(/사진|포토|전망|야경|뷰|스냅|풍경|view|photo/.test(t))return 'photo';
+  if(/세미나|회의|스터디|워크숍|강의실|미팅|seminar|meeting/.test(t))return 'seminar';
+  if(/학원|아카데미|교육|학교|강습|수업|클래스|체험|academy|school|class/.test(t))return 'academy';
+  if(/갤러리|전시|미술관|박물관|아트|gallery|museum|exhibit|art/.test(t))return 'gallery';
+  if(/서점|책방|도서관|북카페|문고|book|library|bookstore/.test(t))return 'book';
   return 'spot';
 }
 
@@ -152,9 +168,10 @@ function renderMarkers(){
   const markers=course.markers||[];
   $('markers-empty').hidden=Boolean(markers.length);
   $('markers').innerHTML=markers.map((m,i)=>{
-    const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:'⚐'};
+    const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:CATEGORY_ICONS.spot};
     const hasOffset = m.labelOffsetX !== undefined || m.labelOffsetY !== undefined || m.labelOffset !== undefined;
-    return `<li class="marker-card ${esc(m.category||'spot')}"><div class="marker-card-header"><span class="marker-badge">${cat.icon} ${esc(cat.label)}</span><strong class="marker-title">${esc(m.name)}</strong></div>${m.address?`<p class="marker-address muted small">${esc(m.address)}</p>`:''}<div class="marker-actions"><button data-marker-edit="${i}">수정</button><button data-marker-locate="${i}">지도에서 보기</button><button data-marker-reposition="${i}">위치 변경</button>${hasOffset?`<button data-reset-marker-label="${i}" class="text-button">라벨 초기화</button>`:''}<button data-marker-delete="${i}" class="danger">삭제</button>${m.naverLink?`<a href="${esc(m.naverLink)}" target="_blank" rel="noopener noreferrer">검색 출처 ↗</a>`:''}</div></li>`;
+    const isEditingThis = markerEditing?.index === i;
+    return `<li class="marker-card ${esc(m.category||'spot')}${isEditingThis?' selected':''}"><div class="marker-card-header"><span class="marker-badge">${cat.icon} ${esc(cat.label)}</span><strong class="marker-title">${esc(m.name)}</strong></div>${m.address?`<p class="marker-address muted small">${esc(m.address)}</p>`:''}<div class="marker-actions"><button data-marker-edit="${i}">수정</button><button data-marker-locate="${i}">지도에서 보기</button><button data-marker-reposition="${i}">위치 변경</button>${hasOffset?`<button data-reset-marker-label="${i}" class="text-button">라벨 초기화</button>`:''}<button data-marker-delete="${i}" class="danger">삭제</button>${m.naverLink?`<a href="${esc(m.naverLink)}" target="_blank" rel="noopener noreferrer">검색 출처 ↗</a>`:''}</div></li>`;
   }).join('');
   $('markers').querySelectorAll('[data-marker-edit]').forEach(b=>b.onclick=()=>editMarker(Number(b.dataset.markerEdit)));
   $('markers').querySelectorAll('[data-marker-locate]').forEach(b=>b.onclick=()=>{focus((course.markers||[])[Number(b.dataset.markerLocate)]);$('map').scrollIntoView({behavior:'smooth',block:'center'});});
@@ -299,12 +316,13 @@ function renderMap(){
 
   // Feature 3: Reference markers with detachable pin-to-label connectors
   (course.markers||[]).forEach((m,i)=>{
-    const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:'⚐'};
+    const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:CATEGORY_ICONS.spot};
     const isDetached=m.labelOffsetX!==undefined||m.labelOffsetY!==undefined||m.labelOffset!==undefined;
     const lx=m.labelOffsetX!==undefined?m.labelOffsetX:(m.labelOffset?.x??0);
     const ly=m.labelOffsetY!==undefined?m.labelOffsetY:(m.labelOffset?.y??-26);
+    const isEditingThis=markerEditing?.index===i;
 
-    const content=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="geo-pin marker-pin ${esc(m.category||'spot')}" title="${esc(m.name)} · ${esc(cat.label)}"><span>${cat.icon}</span></div><svg class="pin-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${isDetached?'':'display:none;'}"><line x1="0" y1="0" x2="${lx}" y2="${ly}" stroke="#50504C" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="0" cy="0" r="2.5" fill="#50504C"/><circle cx="${lx}" cy="${ly}" r="2" fill="#50504C"/></svg><div class="course-ref-marker detachable-label ${isDetached?'detached':''} ${esc(m.category||'spot')}${markerEditing?.index===i?' selected':''}" style="position:absolute;left:${lx}px;top:${ly}px;" title="${esc(m.name)} · ${esc(cat.label)} (라벨을 끌어서 분리)"><span class="ref-icon">${cat.icon}</span><span class="ref-name">${esc(m.name)}</span></div></div>`;
+    const content=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="geo-pin marker-pin ${esc(m.category||'spot')}${isEditingThis?' selected':''}" title="${esc(m.name)} · ${esc(cat.label)}"><span>${cat.icon}</span></div><svg class="pin-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${isDetached?'':'display:none;'}"><line x1="0" y1="0" x2="${lx}" y2="${ly}" stroke="#50504C" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="0" cy="0" r="2.5" fill="#50504C"/><circle cx="${lx}" cy="${ly}" r="2" fill="#50504C"/></svg><div class="course-ref-marker detachable-label ${isDetached?'detached':''} ${esc(m.category||'spot')}${isEditingThis?' selected':''}" style="position:absolute;left:${lx}px;top:${ly}px;" title="${esc(m.name)} · ${esc(cat.label)} (라벨을 끌어서 분리)"><span class="ref-icon">${cat.icon}</span><span class="ref-name">${esc(m.name)}</span></div></div>`;
 
     const marker=new N.Marker({map,position:pos(m),zIndex:150+i,icon:{content,anchor:new N.Point(0,0)}});
     overlays.push(marker);
@@ -394,14 +412,24 @@ $('visit-remove').onclick=()=>{if(confirm('이 방문 장소를 삭제할까요?
 $('visit-close').onclick=()=>{if(confirm('장소 편집을 닫을까요? 적용하지 않은 입력은 저장되지 않습니다.'))$('visit-dialog').close();};
 $('visit-dialog').addEventListener('cancel',e=>{e.preventDefault();$('visit-close').click();});
 $('visit-add').onclick=()=>{if(pendingDraft)return toast('이전 임시저장을 먼저 복원하거나 버려 주세요.');if(!mapReady)return toast('지도 연결 후 위치를 선택해 주세요.');if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');if(course.visits.length>=100)return toast('방문 장소는 최대 100개입니다.');mode='visit';renderMode();$('map').scrollIntoView({behavior:'smooth',block:'center'});};
+function updateMarkerCategoryIndicator(cat){
+  const el=$('marker-category-icon');
+  if(!el)return;
+  const currentCat=cat||$('marker-category-select')?.value||'cafe';
+  el.innerHTML=CATEGORY_ICONS[currentCat]||CATEGORY_ICONS.spot;
+  el.className=`category-icon-indicator ${currentCat}`;
+}
 function editMarker(index,position){
   if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');
   markerEditing={index,position};const m=index>=0?(course.markers||[])[index]:{name:'',category:'cafe',address:'',naverLink:''};const f=$('marker-form');
   for(const key of ['name','category','address'])f.elements[key].value=m[key]||'';f.elements.naverLink.value=m.naverLink||'';
+  updateMarkerCategoryIndicator(f.elements.category.value);
   $('marker-remove').hidden=index<0;$('marker-dialog-title').textContent=index<0?'새로운 참고 마커':'참고 마커 수정';
   if($('marker-label-offset-field'))$('marker-label-offset-field').hidden=!(m.labelOffsetX!==undefined&&m.labelOffsetY!==undefined);
+  renderMap();
   $('marker-dialog').showModal();
 }
+if($('marker-category-select'))$('marker-category-select').onchange=()=>updateMarkerCategoryIndicator();
 $('marker-label-reset').onclick=()=>{
   if(markerEditing&&markerEditing.index>=0){
     mutate(c=>{
@@ -439,7 +467,8 @@ $('marker-form').onsubmit=e=>{
   }catch(e){toast(e.message);}
 };
 $('marker-remove').onclick=()=>{removeMarker(markerEditing.index);markerEditing=null;$('marker-dialog').close();};
-$('marker-close').onclick=()=>{if(confirm('마커 편집을 닫을까요? 적용하지 않은 입력은 저장되지 않습니다.')){markerEditing=null;$('marker-dialog').close();}};
+$('marker-close').onclick=()=>{if(confirm('마커 편집을 닫을까요? 적용하지 않은 입력은 저장되지 않습니다.')){markerEditing=null;$('marker-dialog').close();renderMap();}};
+$('marker-dialog').addEventListener('close',()=>{if(markerEditing){markerEditing=null;renderMap();}});
 $('marker-dialog').addEventListener('cancel',e=>{e.preventDefault();$('marker-close').click();});
 $('marker-add').onclick=()=>{
   if(pendingDraft)return toast('이전 임시저장을 먼저 복원하거나 버려 주세요.');

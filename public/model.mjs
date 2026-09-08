@@ -31,7 +31,7 @@ export function duplicate(course) {
     visits: (course.visits || []).map(v => ({...clone(v), id:crypto.randomUUID()})),
     markers: (course.markers || []).map(m => ({...clone(m), id:crypto.randomUUID()}))};
 }
-export const MARKER_CATEGORIES = ['cafe', 'food', 'photo', 'seminar', 'spot'];
+export const MARKER_CATEGORIES = ['cafe', 'food', 'photo', 'seminar', 'academy', 'gallery', 'book', 'spot'];
 const ALLOWED_CATEGORIES = new Set(MARKER_CATEGORIES);
 
 export function calculateBearing(p1, p2) {

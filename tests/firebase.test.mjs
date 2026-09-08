@@ -286,7 +286,7 @@ test('Firebase scaffolding and security configuration integrity', () => {
   assert.match(rules, /m\.id\s*==\s*markerId/);
   assert.match(rules, /m\.lat\s*>=\s*-90\s*&&\s*m\.lat\s*<=\s*90/);
   assert.match(rules, /m\.lng\s*>=\s*-180\s*&&\s*m\.lng\s*<=\s*180/);
-  assert.match(rules, /'cafe',\s*'food',\s*'photo',\s*'seminar',\s*'spot'/);
+  assert.match(rules, /'cafe',\s*'food',\s*'photo',\s*'seminar',\s*'academy',\s*'gallery',\s*'book',\s*'spot'/);
   assert.match(rules, /m\.naverLink\.matches\('\^https:\/\/\.\+'\)/);
   assert.match(rules, /m\.keys\(\)\.hasAll\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng'\]\)/);
   assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink',\s*'labelOffsetX',\s*'labelOffsetY',\s*'labelOffset'\]\)/);
@@ -479,7 +479,7 @@ test('subcollection markers with label offsets pass validation and persist corre
     if (!m || typeof m !== 'object') return false;
     if (typeof m.id !== 'string' || m.id !== markerId || m.id.length === 0 || m.id.length > 36) return false;
     if (typeof m.name !== 'string' || m.name.length === 0 || m.name.length > 100) return false;
-    if (typeof m.category !== 'string' || !['cafe', 'food', 'photo', 'seminar', 'spot'].includes(m.category)) return false;
+    if (typeof m.category !== 'string' || !['cafe', 'food', 'photo', 'seminar', 'academy', 'gallery', 'book', 'spot'].includes(m.category)) return false;
     if (typeof m.lat !== 'number' || m.lat < -90 || m.lat > 90) return false;
     if (typeof m.lng !== 'number' || m.lng < -180 || m.lng > 180) return false;
     if ('address' in m && (typeof m.address !== 'string' || m.address.length > 200)) return false;
@@ -516,6 +516,9 @@ test('subcollection markers with label offsets pass validation and persist corre
 
   // 1. Verify rules schema validation passes
   assert.equal(isValidMarker(marker, mId), true);
+  assert.equal(isValidMarker({ ...marker, category: 'academy' }, mId), true);
+  assert.equal(isValidMarker({ ...marker, category: 'gallery' }, mId), true);
+  assert.equal(isValidMarker({ ...marker, category: 'book' }, mId), true);
   assert.equal(isValidMarker({ ...marker, labelOffsetX: 501 }, mId), false);
   assert.equal(isValidMarker({ ...marker, labelOffsetY: -501 }, mId), false);
   assert.equal(isValidMarker({ ...marker, extraKey: 'forbidden' }, mId), false);

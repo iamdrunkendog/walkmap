@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {emptyCourse,History,distance,timings,duplicate,validateCourse,validateMarker,courseSignature,segmentAngle,routeArrows} from '../public/model.mjs';
+import {emptyCourse,History,distance,timings,duplicate,validateCourse,validateMarker,courseSignature,segmentAngle,routeArrows,MARKER_CATEGORIES} from '../public/model.mjs';
 import {createApp,openDatabase,addUser,normalizePlace,searchPlaces} from '../server.mjs';
 
 test('route edit / insert / move / delete / undo / redo restores exact points and distances',()=>{
@@ -121,9 +121,11 @@ test('course reference markers: validation, backward compatibility migration, al
  assert.throws(()=>validateCourse({...c,markers:[{...m,naverLink:'https://user:pass@evil.com'}]}));
  assert.throws(()=>validateCourse({...c,markers:[m,{...m}]})); // duplicate marker ID
  assert.throws(()=>validateCourse({...c,markers:Array.from({length:101},()=>({...m,id:crypto.randomUUID()}))})); // > 100
- for(const cat of ['cafe','food','photo','seminar','spot']){
+ for(const cat of ['cafe','food','photo','seminar','academy','gallery','book','spot']){
   assert.equal(validateCourse({...c,markers:[{...m,category:cat}]}).markers[0].category,cat);
+  assert.equal(validateMarker({...m,category:cat}).category,cat);
  }
+ assert.deepEqual(MARKER_CATEGORIES,['cafe','food','photo','seminar','academy','gallery','book','spot']);
 });
 
 test('normalizePlace extracts safe https link and sanitized category',()=>{

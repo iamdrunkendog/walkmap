@@ -796,12 +796,32 @@ dialog select {
   color: var(--gray-700);
 }
 
+.cat-icon {
+  display: inline-block;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.marker-badge .cat-icon {
+  width: 11px;
+  height: 11px;
+  color: inherit;
+}
+
 /* Subtle neutral category differentiation */
 .marker-card.cafe .marker-badge { background: #F6F3F1; color: #4E433E; border-color: #E6E0DC; }
 .marker-card.food .marker-badge { background: #F8F2F0; color: #583F38; border-color: #EBDED9; }
 .marker-card.photo .marker-badge { background: #EFF3F6; color: #324756; border-color: #DDE5EC; }
 .marker-card.seminar .marker-badge { background: #F0F3F4; color: #3A474D; border-color: #DFE5E8; }
+.marker-card.academy .marker-badge { background: #F1F3F7; color: #363E4F; border-color: #E0E4EC; }
+.marker-card.gallery .marker-badge { background: #F5F2F7; color: #483D4E; border-color: #E6DFEC; }
+.marker-card.book .marker-badge { background: #F5F5F0; color: #4A4739; border-color: #E7E6DC; }
 .marker-card.spot .marker-badge { background: #F3F3F1; color: #484845; border-color: #E2E2DE; }
+
+.marker-card.selected {
+  border-color: var(--accent-red);
+  box-shadow: 0 0 0 1px var(--accent-red);
+}
 
 .marker-title {
   font-size: 13px;
@@ -1545,11 +1565,35 @@ dialog select {
   color: var(--white);
 }
 
+.geo-pin.marker-pin span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+.geo-pin.marker-pin .cat-icon {
+  width: 12px;
+  height: 12px;
+  color: var(--white);
+}
+
 .geo-pin.marker-pin.cafe { background: #383230; }
 .geo-pin.marker-pin.food { background: #3B312E; }
 .geo-pin.marker-pin.photo { background: #27343D; }
 .geo-pin.marker-pin.seminar { background: #2E3639; }
+.geo-pin.marker-pin.academy { background: #2C313C; }
+.geo-pin.marker-pin.gallery { background: #352F39; }
+.geo-pin.marker-pin.book { background: #36352E; }
 .geo-pin.marker-pin.spot { background: var(--gray-900); }
+
+.geo-pin.marker-pin:hover,
+.geo-pin.marker-pin.selected {
+  background: var(--accent-red) !important;
+  border-color: var(--white);
+  box-shadow: 0 0 0 2px rgba(227, 34, 25, 0.4), 0 3px 8px rgba(0, 0, 0, 0.4);
+}
 
 .pin-leader {
   position: absolute;
@@ -1703,11 +1747,29 @@ dialog select {
 .course-ref-marker.food { background: #3B312E; border-color: #544642; }
 .course-ref-marker.photo { background: #27343D; border-color: #3B4D5A; }
 .course-ref-marker.seminar { background: #2E3639; border-color: #424D52; }
+.course-ref-marker.academy { background: #2C313C; border-color: #414756; }
+.course-ref-marker.gallery { background: #352F39; border-color: #4B4250; }
+.course-ref-marker.book { background: #36352E; border-color: #4D4B41; }
 .course-ref-marker.spot { background: var(--gray-900); border-color: var(--gray-700); }
 
 .course-ref-marker .ref-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 11px;
   flex-shrink: 0;
+  transition: color 0.12s;
+}
+
+.course-ref-marker .ref-icon .cat-icon {
+  width: 11px;
+  height: 11px;
+  color: inherit;
+}
+
+.course-ref-marker:hover .ref-icon,
+.course-ref-marker.selected .ref-icon {
+  color: var(--accent-red);
 }
 
 .course-ref-marker .ref-name {
@@ -1765,6 +1827,47 @@ dialog::backdrop {
 
 dialog label {
   margin-top: 14px;
+}
+
+/* Category select with preview indicator in dialog */
+.category-select-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.category-select-wrapper select {
+  margin-top: 0;
+  flex: 1;
+}
+
+.category-icon-indicator {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+  background: var(--gray-900);
+  color: var(--white);
+  border: 1px solid var(--gray-700);
+  flex-shrink: 0;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.category-icon-indicator.cafe { background: #383230; border-color: #504845; }
+.category-icon-indicator.food { background: #3B312E; border-color: #544642; }
+.category-icon-indicator.photo { background: #27343D; border-color: #3B4D5A; }
+.category-icon-indicator.seminar { background: #2E3639; border-color: #424D52; }
+.category-icon-indicator.academy { background: #2C313C; border-color: #414756; }
+.category-icon-indicator.gallery { background: #352F39; border-color: #4B4250; }
+.category-icon-indicator.book { background: #36352E; border-color: #4D4B41; }
+.category-icon-indicator.spot { background: var(--gray-900); border-color: var(--gray-700); }
+
+.category-icon-indicator .cat-icon {
+  width: 14px;
+  height: 14px;
 }
 
 .two-col {

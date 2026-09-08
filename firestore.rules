@@ -65,7 +65,7 @@ service cloud.firestore {
             && m.name.size() > 0
             && m.name.size() <= 100
             && m.category is string
-            && m.category in ['cafe', 'food', 'photo', 'seminar', 'spot']
+            && m.category in ['cafe', 'food', 'photo', 'seminar', 'academy', 'gallery', 'book', 'spot']
             && m.lat is number
             && m.lat >= -90
             && m.lat <= 90
