@@ -1,0 +1,34 @@
+{
+  "date": "2026-09-08T05:43:06.085Z",
+  "origin": "http://127.0.0.1:3000",
+  "responses": [
+    {
+      "host": "oapi.map.naver.com",
+      "path": "/openapi/v3/maps.js",
+      "status": 200
+    },
+    {
+      "host": "oapi.map.naver.com",
+      "path": "/v3/auth",
+      "status": 200
+    }
+  ],
+  "failures": [
+    {
+      "host": "nrbe.map.naver.net",
+      "error": "net::ERR_CERT_AUTHORITY_INVALID"
+    },
+    {
+      "host": "nrbe.map.naver.net",
+      "error": "net::ERR_CERT_AUTHORITY_INVALID"
+    },
+    {
+      "host": "nrbe.map.naver.net",
+      "error": "net::ERR_CERT_AUTHORITY_INVALID"
+    }
+  ],
+  "mapBackgroundImageCount": 0,
+  "mapMessage": "지도 배경 연결 실패 · 네트워크 보안 정책 또는 인증서 문제로 지도 리소스를 불러오지 못했습니다.",
+  "mapMessageVisible": true,
+  "tlsBypass": false
+}
