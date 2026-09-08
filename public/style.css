@@ -41,6 +41,21 @@
   --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.1);
   --shadow-popover: 0 20px 48px rgba(0, 0, 0, 0.12);
 
+  /* Map Annotation Typography & Sizing Tokens */
+  --map-label-font-size: 13px;
+  --map-label-font-size-sm: 11px;
+  --map-label-font-weight: 500;
+  --map-label-badge-size: 20px;
+  --map-label-badge-font-size: 11px;
+  --map-endpoint-font-size: 13px;
+  --map-endpoint-padding: 4px 10px;
+  --map-endpoint-radius: 16px;
+  --map-ref-icon-size: 13px;
+  --map-ref-max-width: 220px;
+  --map-visit-max-width: 260px;
+  --map-hud-font-size: 13px;
+  --map-hud-btn-font-size: 12px;
+
   font-family: var(--font-sans);
   color: var(--gray-950);
   background: var(--bg-app);
@@ -912,7 +927,7 @@ dialog select {
   border: 0;
   background: transparent;
   padding: 4px 0;
-  font-size: 12px;
+  font-size: 13px;
   font-weight: 500;
   color: var(--gray-800);
   text-align: left;
@@ -1138,7 +1153,7 @@ dialog select {
 .search-item-info small {
   display: block;
   color: var(--gray-500);
-  font-size: 11px;
+  font-size: 12px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1268,17 +1283,17 @@ dialog select {
   gap: 8px;
   align-items: center;
   background: var(--bg-surface);
-  padding: 8px 12px;
+  padding: 8px 14px;
   border: 1px solid var(--gray-200);
   border-radius: 8px;
   box-shadow: var(--shadow-md);
   z-index: 4;
-  font-size: 12px;
+  font-size: var(--map-hud-font-size);
   white-space: nowrap;
 }
 
 .selection button {
-  font-size: 11px;
+  font-size: var(--map-hud-btn-font-size);
   padding: 4px 8px;
 }
 
@@ -1380,11 +1395,11 @@ dialog select {
   background: var(--gray-950);
   color: var(--white);
   border: 2px solid var(--white);
-  border-radius: 14px;
-  padding: 4px 9px;
+  border-radius: var(--map-endpoint-radius);
+  padding: var(--map-endpoint-padding);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25);
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--map-endpoint-font-size);
   font-weight: 600;
   cursor: pointer;
 }
@@ -1556,7 +1571,7 @@ dialog select {
 .geo-pin.visit-pin {
   background: var(--gray-950);
   color: var(--white);
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
 }
 
@@ -1668,15 +1683,15 @@ dialog select {
 .visit-map {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 7px;
   background: var(--white);
   border: 1px solid var(--gray-300);
   box-shadow: var(--shadow-md);
-  padding: 5px 9px;
+  padding: 5px 10px;
   border-radius: 6px;
   white-space: nowrap;
-  font-size: 11px;
-  max-width: 220px;
+  font-size: var(--map-label-font-size);
+  max-width: var(--map-visit-max-width);
   overflow: hidden;
   color: var(--gray-950);
 }
@@ -1687,16 +1702,16 @@ dialog select {
   background: var(--gray-950);
   color: var(--white);
   border-radius: 50%;
-  min-width: 18px;
-  height: 18px;
-  font-size: 10px;
+  min-width: var(--map-label-badge-size);
+  height: var(--map-label-badge-size);
+  font-size: var(--map-label-badge-font-size);
   font-weight: 600;
 }
 
 .visit-map em {
   font-style: normal;
   color: var(--gray-500);
-  font-size: 10px;
+  font-size: var(--map-label-font-size-sm);
   margin-left: auto;
 }
 
@@ -1723,18 +1738,18 @@ dialog select {
 .course-ref-marker {
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 6px;
   background: var(--gray-900);
   color: var(--white);
   border: 1.5px solid var(--gray-700);
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
-  padding: 3px 8px;
-  border-radius: 12px;
+  padding: 4px 10px;
+  border-radius: 14px;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: var(--map-label-font-size);
   font-weight: 500;
   cursor: pointer;
-  max-width: 180px;
+  max-width: var(--map-ref-max-width);
   transition: border-color 0.12s, box-shadow 0.12s;
 }
 
@@ -1756,14 +1771,14 @@ dialog select {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: var(--map-ref-icon-size);
   flex-shrink: 0;
   transition: color 0.12s;
 }
 
 .course-ref-marker .ref-icon .cat-icon {
-  width: 11px;
-  height: 11px;
+  width: var(--map-ref-icon-size);
+  height: var(--map-ref-icon-size);
   color: inherit;
 }
 
@@ -1975,6 +1990,21 @@ dialog label {
 }
 
 @media (max-width: 720px) {
+  :root {
+    --map-label-font-size: 12px;
+    --map-label-font-size-sm: 10.5px;
+    --map-label-badge-size: 19px;
+    --map-label-badge-font-size: 10.5px;
+    --map-endpoint-font-size: 12px;
+    --map-endpoint-padding: 3px 8px;
+    --map-endpoint-radius: 14px;
+    --map-ref-icon-size: 12px;
+    --map-ref-max-width: 180px;
+    --map-visit-max-width: 220px;
+    --map-hud-font-size: 12px;
+    --map-hud-btn-font-size: 11px;
+  }
+
   .topbar {
     height: auto;
     min-height: 54px;

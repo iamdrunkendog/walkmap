@@ -67,12 +67,21 @@ function commit(next,render=true){if(saving)return;if(pendingDraft){toast('먼�
 function mutate(fn){const next=clone(course);fn(next);commit(next);}
 function renderFields(){for(const [id,value] of [['course-name',course.name],['region',course.region],['tags',course.tags.join(', ')],['speed',course.speed]])$(id).value=value;}
 function setupLabelDrag(labelEl, leaderEl, pinEl, getInitial, onSave, onEdit){
+  if(typeof pinEl === 'function'){
+    onEdit = onSave;
+    onSave = getInitial;
+    getInitial = pinEl;
+    pinEl = null;
+  }
+  if(!pinEl){
+    pinEl = labelEl?.parentElement?.querySelector('.geo-pin') || null;
+  }
   let startX=0, startY=0, initX=0, initY=0, isDragging=false, currentX=0, currentY=0, wasDragged=false;
 
-  if(pinEl){
+  if(pinEl && typeof pinEl.addEventListener === 'function'){
     pinEl.addEventListener('click', e=>{
       e.stopPropagation();
-      onEdit();
+      onEdit?.();
     });
   }
 
@@ -113,11 +122,11 @@ function setupLabelDrag(labelEl, leaderEl, pinEl, getInitial, onSave, onEdit){
         const line=leaderEl.querySelector('line');
         if(line){line.setAttribute('x2',String(currentX));line.setAttribute('y2',String(currentY));}
       }
-      if(pinEl)pinEl.style.display='grid';
+      if(pinEl?.style)pinEl.style.display='grid';
       labelEl.classList.add('detached');
     }else{
       if(leaderEl)leaderEl.style.display='none';
-      if(pinEl)pinEl.style.display='none';
+      if(pinEl?.style)pinEl.style.display='none';
       labelEl.classList.remove('detached');
     }
   });
@@ -135,7 +144,7 @@ function setupLabelDrag(labelEl, leaderEl, pinEl, getInitial, onSave, onEdit){
       else onSave(currentX, currentY);
     }else{
       isDragging=false;
-      onEdit();
+      onEdit?.();
     }
   };
 
@@ -145,7 +154,7 @@ function setupLabelDrag(labelEl, leaderEl, pinEl, getInitial, onSave, onEdit){
   labelEl.addEventListener('click', e=>{
     e.stopPropagation();
     if(wasDragged)return;
-    onEdit();
+    onEdit?.();
   });
 }
 
@@ -255,7 +264,7 @@ function renderMap(){
     const content=endpoint
       ?`<div class="endpoint-marker ${i?'end':''} ${isRouteEditing?'draggable':''}" title="${i?'도착점':'출발점'}${isRouteEditing?' (끌어서 이동)':''}">${i?'도착':'출발'}</div>`
       :`<div class="route-marker ${selected===i?'selected':''} ${isRouteEditing?'draggable':''}" title="편집점 ${i+1}${isRouteEditing?' (끌어서 이동)':''}"></div>`;
-    const marker=new N.Marker({map,position:pos(p),draggable:isRouteEditing,zIndex:100,icon:{content,anchor:new N.Point(endpoint?24:8,endpoint?14:8)}});
+    const marker=new N.Marker({map,position:pos(p),draggable:isRouteEditing,zIndex:100,icon:{content,anchor:new N.Point(endpoint ? 25 : 8, endpoint ? 15 : 8)}});
     overlays.push(marker);
     N.Event.addListener(marker,'click',()=>{
       if(pickVisitPosition(p)||pickMarkerPosition(p))return;
@@ -287,7 +296,7 @@ function renderMap(){
     const isDetached=v.labelOffsetX!==undefined||v.labelOffsetY!==undefined||v.labelOffset!==undefined;
     const lx=v.labelOffsetX!==undefined?v.labelOffsetX:(v.labelOffset?.x??0);
     const ly=v.labelOffsetY!==undefined?v.labelOffsetY:(v.labelOffset?.y??-30);
-    const width=Math.min(220,75+v.name.length*12);
+    const width=Math.min(260, 85 + v.name.length * 14);
 
     const content=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="geo-pin visit-pin" title="${esc(v.name)} · ${v.stay}분"><span>${i+1}</span></div><svg class="pin-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${isDetached?'':'display:none;'}"><line x1="0" y1="0" x2="${lx}" y2="${ly}" stroke="#50504C" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="0" cy="0" r="2.5" fill="#50504C"/><circle cx="${lx}" cy="${ly}" r="2" fill="#50504C"/></svg><div class="visit-map detachable-label ${isDetached?'detached':''}" style="position:absolute;left:${lx}px;top:${ly}px;width:${width}px;" title="${esc(v.name)} · ${v.stay}분 (라벨을 끌어서 분리)"><b>${i+1}</b><span>${esc(v.name)}</span><em>${v.stay}분</em></div></div>`;
 
@@ -296,10 +305,11 @@ function renderMap(){
 
     const el=marker.getElement?marker.getElement():marker.el;
     if(el){
+      const pinEl=el.querySelector('.geo-pin');
       const labelEl=el.querySelector('.detachable-label');
       const leaderEl=el.querySelector('.pin-leader');
       if(labelEl&&leaderEl){
-        setupLabelDrag(labelEl,leaderEl,()=>({
+        setupLabelDrag(labelEl,leaderEl,pinEl,()=>({
           x:lx,
           y:ly
         }),(newX,newY)=>{
@@ -308,7 +318,7 @@ function renderMap(){
             else{c.visits[i].labelOffsetX=newX;c.visits[i].labelOffsetY=newY;delete c.visits[i].labelOffset;}
           });
           toast(newX===undefined?'방문 라벨이 기본 위치로 연결되었습니다.':'방문 라벨 위치를 이동했습니다.');
-        });
+        },()=>editVisit(i));
       }
     }
     N.Event.addListener(marker,'click',()=>editVisit(i));
@@ -329,10 +339,11 @@ function renderMap(){
 
     const el=marker.getElement?marker.getElement():marker.el;
     if(el){
+      const pinEl=el.querySelector('.geo-pin');
       const labelEl=el.querySelector('.detachable-label');
       const leaderEl=el.querySelector('.pin-leader');
       if(labelEl&&leaderEl){
-        setupLabelDrag(labelEl,leaderEl,()=>({
+        setupLabelDrag(labelEl,leaderEl,pinEl,()=>({
           x:lx,
           y:ly
         }),(newX,newY)=>{
@@ -342,6 +353,10 @@ function renderMap(){
             else{c.markers[i].labelOffsetX=newX;c.markers[i].labelOffsetY=newY;delete c.markers[i].labelOffset;}
           });
           toast(newX===undefined?'마커 라벨이 기본 위치로 연결되었습니다.':'마커 라벨 위치를 이동했습니다.');
+        },()=>{
+          if(pickMarkerPosition(m)||pickVisitPosition(m))return;
+          selectTab('markers');
+          editMarker(i);
         });
       }
     }
