@@ -20,12 +20,14 @@ class Map{
 }
 class Marker{
  constructor(o){this.o=o;this.position=o.position;this.map=o.map;this.el=document.createElement('div');this.el.dataset.fixtureMarker='true';this.el.innerHTML=o.icon.content;this.el.style.cssText=`position:absolute;z-index:${o.zIndex||1};touch-action:none;`;
+ if(o.clickable===false){this.el.style.pointerEvents='none';delete this.el.dataset.fixtureMarker;}
  this.el.addEventListener('click',e=>{e.stopPropagation();if(!this.moved)Event.trigger(this,'click');this.moved=false;});
  if(o.draggable){let start=null;this.el.addEventListener('pointerdown',e=>{e.stopPropagation();start={x:e.clientX,y:e.clientY};this.el.setPointerCapture(e.pointerId);this.moved=false;});this.el.addEventListener('pointermove',e=>{if(!start)return;if(Math.abs(e.clientX-start.x)+Math.abs(e.clientY-start.y)<3)return;this.moved=true;const r=this.map.el.getBoundingClientRect();this.position=this.map.fromOffset(e.clientX-r.left,e.clientY-r.top);this.render();});this.el.addEventListener('pointerup',e=>{if(start&&this.moved)Event.trigger(this,'dragend');start=null;});}
  this.map.el.append(this.el);this.render();
  }
  render(){const p=this.map.getProjection().fromCoordToOffset(this.position),a=this.o.icon.anchor;this.el.style.left=p.x-a.x+'px';this.el.style.top=p.y-a.y+'px';}
  getPosition(){return this.position;}setMap(map){if(!map)this.el.remove();}
+ getElement(){return this.el;}
 }
 class Polyline{constructor(o){this.el=document.createElementNS('http://www.w3.org/2000/svg','svg');this.el.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',o.path.map(p=>{const pt=o.map.getProjection().fromCoordToOffset(p);return `${pt.x},${pt.y}`;}).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke',o.strokeColor);line.setAttribute('stroke-width',o.strokeWeight);line.setAttribute('stroke-linejoin','round');this.el.append(line);o.map.el.prepend(this.el);}setMap(m){if(!m)this.el.remove();}}
 window.naver={maps:{Map,Marker,Polyline,LatLng,LatLngBounds,Point,Event,Position:{RIGHT_CENTER:1}}};

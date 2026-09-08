@@ -1337,8 +1337,16 @@ dialog select {
   width: 14px;
   height: 14px;
   box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
-  cursor: grab;
+  cursor: pointer;
   transition: transform 0.1s;
+}
+
+.route-marker.draggable {
+  cursor: grab;
+}
+
+.route-marker.draggable:active {
+  cursor: grabbing;
 }
 
 .route-marker.selected {
@@ -1358,7 +1366,15 @@ dialog select {
   white-space: nowrap;
   font-size: 11px;
   font-weight: 600;
+  cursor: pointer;
+}
+
+.endpoint-marker.draggable {
   cursor: grab;
+}
+
+.endpoint-marker.draggable:active {
+  cursor: grabbing;
 }
 
 .endpoint-marker.end {
@@ -1386,6 +1402,223 @@ dialog select {
   border-color: var(--accent-red);
   color: var(--accent-red);
   transform: scale(1.15);
+}
+
+/* Route Direction Arrow Overlay */
+.route-arrow {
+  display: grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  color: var(--gray-700);
+  background: var(--white);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  border-radius: 50%;
+  pointer-events: none;
+  user-select: none;
+  transition: transform 0.12s ease;
+}
+
+.route-arrow.active,
+.route-arrow.selected {
+  color: var(--accent-red);
+}
+
+.route-arrow svg {
+  display: block;
+  overflow: visible;
+}
+
+.route-arrow.active svg path:last-child,
+.route-arrow.selected svg path:last-child {
+  stroke: var(--accent-red) !important;
+}
+
+/* Route Mode Banner in Sidepanel */
+.route-mode-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: var(--gray-100);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+}
+
+.route-mode-banner.editing {
+  background: var(--accent-soft);
+  border-color: rgba(227, 34, 25, 0.35);
+}
+
+.route-edit-btn {
+  padding: 5px 9px;
+  font-size: 12px;
+  font-weight: 600;
+  background: var(--gray-950);
+  color: var(--white);
+  border-color: var(--gray-950);
+}
+
+.route-edit-btn:hover {
+  background: var(--gray-900);
+}
+
+.route-mode-banner.editing .route-edit-btn {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+/* Route Direction Legend */
+.summary-title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.route-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--gray-600);
+  font-weight: 500;
+}
+
+.legend-dot {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+}
+
+.legend-dot.start {
+  background: var(--gray-950);
+}
+
+.legend-dot.end {
+  background: var(--accent-red);
+}
+
+.legend-arrow {
+  font-weight: 700;
+  color: var(--gray-700);
+  font-size: 11px;
+  margin: 0 1px;
+}
+
+/* Detachable Pin & Label Overlay */
+.geo-pin {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  left: -11px;
+  top: -11px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--white);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
+  cursor: pointer;
+  user-select: none;
+  z-index: 10;
+  transition: transform 0.12s ease, box-shadow 0.12s ease;
+}
+
+.geo-pin:hover {
+  transform: scale(1.15);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.4);
+}
+
+.geo-pin.visit-pin {
+  background: var(--gray-950);
+  color: var(--white);
+  font-size: 10px;
+  font-weight: 700;
+}
+
+.geo-pin.marker-pin {
+  font-size: 11px;
+  color: var(--white);
+}
+
+.geo-pin.marker-pin.cafe { background: #383230; }
+.geo-pin.marker-pin.food { background: #3B312E; }
+.geo-pin.marker-pin.photo { background: #27343D; }
+.geo-pin.marker-pin.seminar { background: #2E3639; }
+.geo-pin.marker-pin.spot { background: var(--gray-900); }
+
+.pin-leader {
+  position: absolute;
+  left: 0;
+  top: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 5;
+}
+
+.pin-leader line {
+  stroke: var(--gray-500);
+  stroke-width: 1.5;
+  stroke-dasharray: 3 3;
+  pointer-events: none;
+}
+
+.pin-leader circle {
+  fill: var(--gray-500);
+  pointer-events: none;
+}
+
+.pin-leader.active line,
+.pin-leader.editing line,
+.selected .pin-leader line,
+.detachable-label.dragging ~ .pin-leader line {
+  stroke: var(--accent-red);
+}
+
+.pin-leader.active circle,
+.pin-leader.editing circle,
+.selected .pin-leader circle,
+.detachable-label.dragging ~ .pin-leader circle {
+  fill: var(--accent-red);
+}
+
+.detachable-label {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+  z-index: 20;
+  transform: translate(-50%, -50%);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.detachable-label:hover {
+  border-color: var(--gray-400);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12);
+}
+
+.detachable-label.dragging {
+  cursor: grabbing !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  border-color: var(--gray-800);
+  z-index: 30;
+}
+
+.detachable-label.detached {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.16);
+  border-color: var(--gray-400);
+}
+
+.label-offset-field {
+  margin-top: 14px;
+  padding: 8px 12px;
+  background: var(--gray-50);
+  border: 1px solid var(--gray-200);
+  border-radius: 6px;
 }
 
 .visit-map {

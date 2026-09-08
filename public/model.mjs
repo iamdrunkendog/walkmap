@@ -34,6 +34,35 @@ export function duplicate(course) {
 export const MARKER_CATEGORIES = ['cafe', 'food', 'photo', 'seminar', 'spot'];
 const ALLOWED_CATEGORIES = new Set(MARKER_CATEGORIES);
 
+export function calculateBearing(p1, p2) {
+  const rad = v => v * Math.PI / 180;
+  const lat1 = rad(p1.lat), lat2 = rad(p2.lat);
+  const dlng = rad(p2.lng - p1.lng);
+  const y = Math.sin(dlng) * Math.cos(lat2);
+  const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(dlng);
+  return (Math.atan2(y, x) * 180 / Math.PI + 360) % 360;
+}
+
+export function segmentAngle(p1, p2) {
+  return Math.atan2(-(p2.lat - p1.lat), (p2.lng - p1.lng) * Math.cos(p1.lat * Math.PI / 180)) * 180 / Math.PI;
+}
+
+export function routeArrows(points, selected = -1) {
+  const arrows = [];
+  for (let i = 1; i < (points || []).length; i++) {
+    const p1 = points[i - 1], p2 = points[i];
+    if (distance([p1, p2]) < 8) continue;
+    const angle = segmentAngle(p1, p2);
+    const position = {
+      lat: p1.lat + (p2.lat - p1.lat) * 0.58,
+      lng: p1.lng + (p2.lng - p1.lng) * 0.58
+    };
+    const active = selected === i - 1 || selected === i;
+    arrows.push({ index: i, angle, position, active });
+  }
+  return arrows;
+}
+
 export function validateMarker(m) {
   const fail = () => { throw new Error('코스 입력값을 확인해 주세요.'); };
   const str = (v, max, required=false) => {if(typeof v!=='string'||v.length>max||(required&&!v.trim())) fail(); return v;};
@@ -51,6 +80,16 @@ export function validateMarker(m) {
   }
   const res = {id:str(m.id,36,true),...pos(m),name:str(m.name||m.title,100,true),category:cat,address};
   if(link) res.naverLink = link;
+
+  if (m.labelOffsetX !== undefined) res.labelOffsetX = Math.round(number(m.labelOffsetX, -500, 500));
+  if (m.labelOffsetY !== undefined) res.labelOffsetY = Math.round(number(m.labelOffsetY, -500, 500));
+  if (m.labelOffset !== undefined) {
+    if (!m.labelOffset || typeof m.labelOffset !== 'object' || Array.isArray(m.labelOffset)) fail();
+    res.labelOffset = {
+      x: Math.round(number(m.labelOffset.x, -500, 500)),
+      y: Math.round(number(m.labelOffset.y, -500, 500))
+    };
+  }
   return res;
 }
 
@@ -67,7 +106,17 @@ export function validateCourse(c) {
     if(v.source!=='user') fail();
     const link=str(v.link,2000);
     if(link) {try {const u=new URL(link); if(u.protocol!=='https:'||u.username||u.password) fail();}catch{fail();}}
-    return {id:str(v.id,36,true),...pos(v),name:str(v.name,100,true),stay:number(v.stay,0,1440),memo:str(v.memo,5000),link,source:'user'};
+    const resV = {id:str(v.id,36,true),...pos(v),name:str(v.name,100,true),stay:number(v.stay,0,1440),memo:str(v.memo,5000),link,source:'user'};
+    if (v.labelOffsetX !== undefined) resV.labelOffsetX = Math.round(number(v.labelOffsetX, -500, 500));
+    if (v.labelOffsetY !== undefined) resV.labelOffsetY = Math.round(number(v.labelOffsetY, -500, 500));
+    if (v.labelOffset !== undefined) {
+      if (!v.labelOffset || typeof v.labelOffset !== 'object' || Array.isArray(v.labelOffset)) fail();
+      resV.labelOffset = {
+        x: Math.round(number(v.labelOffset.x, -500, 500)),
+        y: Math.round(number(v.labelOffset.y, -500, 500))
+      };
+    }
+    return resV;
   });
   if(new Set(visits.map(v=>v.id)).size!==visits.length) fail();
   const markers=rawMarkers.map(validateMarker);

@@ -23,11 +23,22 @@ try{
  await page.locator('#course-name').fill('서촌 빛과 골목 산책 · 검증 예시');await page.locator('#region').fill('서울 종로구');await page.locator('#tags').fill('포토워크, 골목, 검증용');
  await page.locator('#draw').click();for(const [x,y] of [[200,340],[370,320],[390,440],[620,460]])await clickMap(x,y);await page.locator('#finish').click();assert.equal(await page.locator('.point-row').count(),4);
  const initialDistance=await page.locator('#distance').textContent();
+ // In normal pan mode: route points are not draggable and insert-markers are 0
+ assert.equal(await page.locator('.insert-marker').count(),0);
+ const panMarker=await page.locator('.route-marker').nth(1).boundingBox();
+ await page.mouse.move(panMarker.x+8,panMarker.y+8);await page.mouse.down();await page.mouse.move(panMarker.x+65,panMarker.y-65,{steps:8});await page.mouse.up();
+ assert.equal(await page.locator('#distance').textContent(),initialDistance);
+ step('지도 이동 모드에서 경로 점 이동 불가 및 중간 삽입(+) 숨김');
+
+ // Clicking #draw enters route edit mode where insert-marker and dragging work
+ await page.locator('#draw').click();
+ assert.ok(await page.locator('.insert-marker').count()>0);
  await page.locator('.insert-marker').nth(1).click();assert.equal(await page.locator('.point-row').count(),5);
  const marker=await page.locator('.route-marker').nth(1).boundingBox();await page.mouse.move(marker.x+8,marker.y+8);await page.mouse.down();await page.mouse.move(marker.x+65,marker.y-65,{steps:8});await page.mouse.up();
  assert.notEqual(await page.locator('#distance').textContent(),initialDistance);const movedDistance=await page.locator('#distance').textContent();
  await page.locator('.route-marker').nth(1).click();await page.locator('#selection-delete').click();assert.equal(await page.locator('.point-row').count(),4);await page.locator('#undo').click();assert.equal(await page.locator('.point-row').count(),5);assert.equal(await page.locator('#distance').textContent(),movedDistance);await page.locator('#redo').click();assert.equal(await page.locator('.point-row').count(),4);await page.locator('#undo').click();
- step('여러 점 작성·중간 삽입·끌기 이동·삭제·실행 취소·다시 실행 및 거리 복원');
+ await page.locator('#finish').click();assert.equal(await page.locator('.insert-marker').count(),0);
+ step('경로 편집 모드에서 점 삽입·끌기 이동·삭제·실행 취소·다시 실행 및 완료 시 이동 모드 전환');
  await page.locator('#draw').click();await clickMap(740,480);await page.locator('#cancel').click();assert.equal(await page.locator('.point-row').count(),5);step('그리기 취소 시 이전 경로 복원');
  await page.locator('#tab-visits').click();
  for(const [i,name,stay,x,y] of [[0,'출발 · 골목 입구',10,200,340],[1,'빛과 그림자 촬영',25,395,435],[2,'마지막 프레임',15,620,460]]){

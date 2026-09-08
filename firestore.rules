@@ -74,8 +74,11 @@ service cloud.firestore {
             && m.lng <= 180
             && (!('address' in m) || (m.address is string && m.address.size() <= 200))
             && (!('naverLink' in m) || (m.naverLink is string && m.naverLink.size() <= 2000 && m.naverLink.matches('^https://.+')))
+            && (!('labelOffsetX' in m) || (m.labelOffsetX is number && m.labelOffsetX >= -500 && m.labelOffsetX <= 500))
+            && (!('labelOffsetY' in m) || (m.labelOffsetY is number && m.labelOffsetY >= -500 && m.labelOffsetY <= 500))
+            && (!('labelOffset' in m) || (m.labelOffset is map && m.labelOffset.x is number && m.labelOffset.x >= -500 && m.labelOffset.x <= 500 && m.labelOffset.y is number && m.labelOffset.y >= -500 && m.labelOffset.y <= 500))
             && m.keys().hasAll(['id', 'name', 'category', 'lat', 'lng'])
-            && m.keys().hasOnly(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink']);
+            && m.keys().hasOnly(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink', 'labelOffsetX', 'labelOffsetY', 'labelOffset']);
         }
 
         // Only authenticated user matching the path userId can read markers

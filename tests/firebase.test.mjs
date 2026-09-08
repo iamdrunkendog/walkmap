@@ -289,7 +289,9 @@ test('Firebase scaffolding and security configuration integrity', () => {
   assert.match(rules, /'cafe',\s*'food',\s*'photo',\s*'seminar',\s*'spot'/);
   assert.match(rules, /m\.naverLink\.matches\('\^https:\/\/\.\+'\)/);
   assert.match(rules, /m\.keys\(\)\.hasAll\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng'\]\)/);
-  assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink'\]\)/);
+  assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink',\s*'labelOffsetX',\s*'labelOffsetY',\s*'labelOffset'\]\)/);
+  assert.match(rules, /m\.labelOffsetX\s*>=\s*-500\s*&&\s*m\.labelOffsetX\s*<=\s*500/);
+  assert.match(rules, /m\.labelOffsetY\s*>=\s*-500\s*&&\s*m\.labelOffsetY\s*<=\s*500/);
   assert.match(rules, /allow create,\s*update:\s*if request\.auth != null\s*&&\s*request\.auth\.uid == userId\s*&&\s*isValidMarker\(request\.resource\.data\)/);
   assert.match(rules, /allow delete:\s*if request\.auth != null\s*&&\s*request\.auth\.uid == userId/);
 
@@ -467,4 +469,81 @@ test('Firebase Auth persistence, startup loading UI, and state transition logic'
   await simUnauth.handleAuthState(null);
   assert.equal(simUnauth.elements['login-screen'].hidden, false);
   assert.equal(simUnauth.elements['app'].hidden, true);
+});
+
+test('subcollection markers with label offsets pass validation and persist correctly', async () => {
+  const store = new Map();
+
+  // Helper matching firestore.rules isValidMarker
+  function isValidMarker(m, markerId) {
+    if (!m || typeof m !== 'object') return false;
+    if (typeof m.id !== 'string' || m.id !== markerId || m.id.length === 0 || m.id.length > 36) return false;
+    if (typeof m.name !== 'string' || m.name.length === 0 || m.name.length > 100) return false;
+    if (typeof m.category !== 'string' || !['cafe', 'food', 'photo', 'seminar', 'spot'].includes(m.category)) return false;
+    if (typeof m.lat !== 'number' || m.lat < -90 || m.lat > 90) return false;
+    if (typeof m.lng !== 'number' || m.lng < -180 || m.lng > 180) return false;
+    if ('address' in m && (typeof m.address !== 'string' || m.address.length > 200)) return false;
+    if ('naverLink' in m && (typeof m.naverLink !== 'string' || m.naverLink.length > 2000 || !m.naverLink.startsWith('https://'))) return false;
+    if ('labelOffsetX' in m && (typeof m.labelOffsetX !== 'number' || m.labelOffsetX < -500 || m.labelOffsetX > 500)) return false;
+    if ('labelOffsetY' in m && (typeof m.labelOffsetY !== 'number' || m.labelOffsetY < -500 || m.labelOffsetY > 500)) return false;
+    if ('labelOffset' in m) {
+      if (!m.labelOffset || typeof m.labelOffset !== 'object' || Array.isArray(m.labelOffset)) return false;
+      if (typeof m.labelOffset.x !== 'number' || m.labelOffset.x < -500 || m.labelOffset.x > 500) return false;
+      if (typeof m.labelOffset.y !== 'number' || m.labelOffset.y < -500 || m.labelOffset.y > 500) return false;
+    }
+    const required = ['id', 'name', 'category', 'lat', 'lng'];
+    for (const k of required) {
+      if (!(k in m)) return false;
+    }
+    const allowed = new Set(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink', 'labelOffsetX', 'labelOffsetY', 'labelOffset']);
+    for (const k of Object.keys(m)) {
+      if (!allowed.has(k)) return false;
+    }
+    return true;
+  }
+
+  const mId = crypto.randomUUID();
+  const marker = {
+    id: mId,
+    name: '경복궁 포토스팟',
+    category: 'photo',
+    address: '서울 종로구 사직로 161',
+    lat: 37.5796,
+    lng: 126.9770,
+    labelOffsetX: 75,
+    labelOffsetY: -120
+  };
+
+  // 1. Verify rules schema validation passes
+  assert.equal(isValidMarker(marker, mId), true);
+  assert.equal(isValidMarker({ ...marker, labelOffsetX: 501 }, mId), false);
+  assert.equal(isValidMarker({ ...marker, labelOffsetY: -501 }, mId), false);
+  assert.equal(isValidMarker({ ...marker, extraKey: 'forbidden' }, mId), false);
+
+  // 2. Verify persistence in simulated subcollection
+  const uid = 'test-user-offset';
+  const courseId = crypto.randomUUID();
+  const path = `users/${uid}/courses/${courseId}/markers/${mId}`;
+  store.set(path, structuredClone(marker));
+
+  const stored = store.get(path);
+  assert.ok(stored);
+  assert.equal(stored.id, mId);
+  assert.equal(stored.labelOffsetX, 75);
+  assert.equal(stored.labelOffsetY, -120);
+
+  // 3. Verify marker with labelOffset object as well
+  const mId2 = crypto.randomUUID();
+  const marker2 = {
+    id: mId2,
+    name: '삼청동 카페',
+    category: 'cafe',
+    lat: 37.583,
+    lng: 126.982,
+    labelOffset: { x: -30, y: 40 }
+  };
+  assert.equal(isValidMarker(marker2, mId2), true);
+  const path2 = `users/${uid}/courses/${courseId}/markers/${mId2}`;
+  store.set(path2, structuredClone(marker2));
+  assert.deepEqual(store.get(path2).labelOffset, { x: -30, y: 40 });
 });

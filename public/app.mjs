@@ -1,4 +1,4 @@
-import {emptyCourse,History,clone,timings,duplicate,validateCourse,courseSignature} from './model.mjs';
+import {emptyCourse,History,clone,timings,distance,calculateBearing,duplicate,validateCourse,courseSignature,routeArrows} from './model.mjs';
 import {
   watchAuthState,
   loginWithUsername,
@@ -50,23 +50,120 @@ function metrics(){const t=timings(course);$('distance').innerHTML=`${(t.meters/
 function commit(next,render=true){if(saving)return;if(pendingDraft){toast('먼저 이전 임시저장을 복원하거나 버려 주세요.');renderFields();return;}course=next;history.set(course);persistDraft();status();metrics();if(render){renderFields();renderVisits();renderMarkers();renderPoints();renderMap();}}
 function mutate(fn){const next=clone(course);fn(next);commit(next);}
 function renderFields(){for(const [id,value] of [['course-name',course.name],['region',course.region],['tags',course.tags.join(', ')],['speed',course.speed]])$(id).value=value;}
+function setupLabelDrag(labelEl, leaderEl, pinEl, getInitial, onSave, onEdit){
+  let startX=0, startY=0, initX=0, initY=0, isDragging=false, currentX=0, currentY=0, wasDragged=false;
+
+  if(pinEl){
+    pinEl.addEventListener('click', e=>{
+      e.stopPropagation();
+      onEdit();
+    });
+  }
+
+  labelEl.addEventListener('pointerdown', e=>{
+    if(e.button!==0)return;
+    if(mode.startsWith('visit')||mode.startsWith('marker'))return;
+    e.stopPropagation();
+    startX=e.clientX;
+    startY=e.clientY;
+    const init=getInitial();
+    initX=init.x;
+    initY=init.y;
+    currentX=initX;
+    currentY=initY;
+    isDragging=false;
+    wasDragged=false;
+    try{labelEl.setPointerCapture(e.pointerId);}catch{}
+  });
+
+  labelEl.addEventListener('pointermove', e=>{
+    if(!labelEl.hasPointerCapture(e.pointerId))return;
+    const dx=e.clientX-startX, dy=e.clientY-startY;
+    if(!isDragging&&Math.hypot(dx,dy)>4){
+      isDragging=true;
+      wasDragged=true;
+      labelEl.classList.add('dragging');
+    }
+    if(!isDragging)return;
+    e.stopPropagation();
+    currentX=Math.round(Math.max(-400, Math.min(400, initX+dx)));
+    currentY=Math.round(Math.max(-400, Math.min(400, initY+dy)));
+    labelEl.style.left=`${currentX}px`;
+    labelEl.style.top=`${currentY}px`;
+    const dist=Math.hypot(currentX, currentY);
+    if(dist>=12){
+      if(leaderEl){
+        leaderEl.style.display='block';
+        const line=leaderEl.querySelector('line');
+        if(line){line.setAttribute('x2',String(currentX));line.setAttribute('y2',String(currentY));}
+      }
+      if(pinEl)pinEl.style.display='grid';
+      labelEl.classList.add('detached');
+    }else{
+      if(leaderEl)leaderEl.style.display='none';
+      if(pinEl)pinEl.style.display='none';
+      labelEl.classList.remove('detached');
+    }
+  });
+
+  const onEnd=e=>{
+    if(!labelEl.hasPointerCapture(e.pointerId))return;
+    try{labelEl.releasePointerCapture(e.pointerId);}catch{}
+    labelEl.classList.remove('dragging');
+    const totalMove = Math.hypot(e.clientX-startX, e.clientY-startY);
+    if(isDragging || totalMove > 4){
+      isDragging=false;
+      setTimeout(()=>{wasDragged=false;},150);
+      const dist=Math.hypot(currentX, currentY);
+      if(dist<12)onSave(0, 0);
+      else onSave(currentX, currentY);
+    }else{
+      isDragging=false;
+      onEdit();
+    }
+  };
+
+  labelEl.addEventListener('pointerup', onEnd);
+  labelEl.addEventListener('pointercancel', onEnd);
+
+  labelEl.addEventListener('click', e=>{
+    e.stopPropagation();
+    if(wasDragged)return;
+    onEdit();
+  });
+}
+
 function renderVisits(){
   $('visits-empty').hidden=Boolean((course.visits||[]).length);
-  $('visits').innerHTML=(course.visits||[]).map((v,i)=>`<li class="visit-card"><span class="visit-number">${String(i+1).padStart(2,'0')}</span><div class="visit-card-content"><h3>${esc(v.name)}</h3><span class="tag">체류 ${v.stay}분</span>${v.memo?`<p>${esc(v.memo)}</p>`:''}<div class="visit-actions"><button data-edit="${i}">수정</button><button data-locate="${i}">지도에서 보기</button><button data-reposition="${i}">위치 변경</button>${v.link?`<a href="${esc(v.link)}" target="_blank" rel="noopener noreferrer">상세정보 ↗</a>`:''}</div></div></li>`).join('');
+  $('visits').innerHTML=(course.visits||[]).map((v,i)=>{
+    const hasOffset = v.labelOffsetX !== undefined || v.labelOffsetY !== undefined || v.labelOffset !== undefined;
+    return `<li class="visit-card"><span class="visit-number">${String(i+1).padStart(2,'0')}</span><div class="visit-card-content"><h3>${esc(v.name)}</h3><span class="tag">체류 ${v.stay}분</span>${v.memo?`<p>${esc(v.memo)}</p>`:''}<div class="visit-actions"><button data-edit="${i}">수정</button><button data-locate="${i}">지도에서 보기</button><button data-reposition="${i}">위치 변경</button>${hasOffset?`<button data-reset-visit-label="${i}" class="text-button">라벨 초기화</button>`:''}${v.link?`<a href="${esc(v.link)}" target="_blank" rel="noopener noreferrer">상세정보 ↗</a>`:''}</div></div></li>`;
+  }).join('');
   $('visits').querySelectorAll('[data-edit]').forEach(b=>b.onclick=()=>editVisit(Number(b.dataset.edit)));
   $('visits').querySelectorAll('[data-locate]').forEach(b=>b.onclick=()=>{focus(course.visits[Number(b.dataset.locate)]);$('map').scrollIntoView({behavior:'smooth',block:'center'});});
   $('visits').querySelectorAll('[data-reposition]').forEach(b=>b.onclick=()=>{if(!mapReady)return toast('지도 연결 후 위치를 변경할 수 있습니다.');if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');mode=`visit-move:${b.dataset.reposition}`;renderMode();$('map').scrollIntoView({behavior:'smooth',block:'center'});});
+  $('visits').querySelectorAll('[data-reset-visit-label]').forEach(b=>b.onclick=()=>{
+    const idx=Number(b.dataset.resetVisitLabel);
+    mutate(c=>{delete c.visits[idx].labelOffsetX;delete c.visits[idx].labelOffsetY;delete c.visits[idx].labelOffset;});
+    toast('방문 라벨 위치를 기본 위치로 초기화했습니다.');
+  });
 }
 function renderMarkers(){
   const markers=course.markers||[];
   $('markers-empty').hidden=Boolean(markers.length);
   $('markers').innerHTML=markers.map((m,i)=>{
     const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:'⚐'};
-    return `<li class="marker-card ${esc(m.category||'spot')}"><div class="marker-card-header"><span class="marker-badge">${cat.icon} ${esc(cat.label)}</span><strong class="marker-title">${esc(m.name)}</strong></div>${m.address?`<p class="marker-address muted small">${esc(m.address)}</p>`:''}<div class="marker-actions"><button data-marker-edit="${i}">수정</button><button data-marker-locate="${i}">지도에서 보기</button><button data-marker-reposition="${i}">위치 변경</button><button data-marker-delete="${i}" class="danger">삭제</button>${m.naverLink?`<a href="${esc(m.naverLink)}" target="_blank" rel="noopener noreferrer">검색 출처 ↗</a>`:''}</div></li>`;
+    const hasOffset = m.labelOffsetX !== undefined || m.labelOffsetY !== undefined || m.labelOffset !== undefined;
+    return `<li class="marker-card ${esc(m.category||'spot')}"><div class="marker-card-header"><span class="marker-badge">${cat.icon} ${esc(cat.label)}</span><strong class="marker-title">${esc(m.name)}</strong></div>${m.address?`<p class="marker-address muted small">${esc(m.address)}</p>`:''}<div class="marker-actions"><button data-marker-edit="${i}">수정</button><button data-marker-locate="${i}">지도에서 보기</button><button data-marker-reposition="${i}">위치 변경</button>${hasOffset?`<button data-reset-marker-label="${i}" class="text-button">라벨 초기화</button>`:''}<button data-marker-delete="${i}" class="danger">삭제</button>${m.naverLink?`<a href="${esc(m.naverLink)}" target="_blank" rel="noopener noreferrer">검색 출처 ↗</a>`:''}</div></li>`;
   }).join('');
   $('markers').querySelectorAll('[data-marker-edit]').forEach(b=>b.onclick=()=>editMarker(Number(b.dataset.markerEdit)));
   $('markers').querySelectorAll('[data-marker-locate]').forEach(b=>b.onclick=()=>{focus((course.markers||[])[Number(b.dataset.markerLocate)]);$('map').scrollIntoView({behavior:'smooth',block:'center'});});
   $('markers').querySelectorAll('[data-marker-reposition]').forEach(b=>b.onclick=()=>{if(!mapReady)return toast('지도 연결 후 위치를 변경할 수 있습니다.');if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');mode=`marker-move:${b.dataset.markerReposition}`;renderMode();$('map').scrollIntoView({behavior:'smooth',block:'center'});});
+  $('markers').querySelectorAll('[data-reset-marker-label]').forEach(b=>b.onclick=()=>{
+    const idx=Number(b.dataset.resetMarkerLabel);
+    mutate(c=>{delete (c.markers=c.markers||[])[idx].labelOffsetX;delete c.markers[idx].labelOffsetY;delete c.markers[idx].labelOffset;});
+    toast('마커 라벨 위치를 기본 위치로 초기화했습니다.');
+  });
   $('markers').querySelectorAll('[data-marker-delete]').forEach(b=>b.onclick=()=>removeMarker(Number(b.dataset.markerDelete)));
 }
 function removeMarker(i){
@@ -81,12 +178,30 @@ function renderPoints(){
   $('points').querySelectorAll('[data-delete]').forEach(b=>b.onclick=()=>removePoint(Number(b.dataset.delete)));
 }
 function selectTab(tab){currentTab=tab;for(const t of ['visits','markers','route']){$(`tab-${t}`).setAttribute('aria-selected',String(tab===t));$(`${t}-panel`).hidden=tab!==t;}}
-function renderSelection(){ $('selection').hidden=selected<0||selected>=course.points.length;if(!$('selection').hidden)$('selection-label').textContent=`편집점 ${selected+1} · 끌어서 이동`;}
+function renderSelection(){
+  $('selection').hidden=selected<0||selected>=course.points.length;
+  if(!$('selection').hidden){
+    $('selection-label').textContent=mode==='draw'?`편집점 ${selected+1} · 끌어서 이동`:`편집점 ${selected+1} (경로 편집 모드에서 끌어 이동)`;
+  }
+}
 function renderMode(){
-  $('pan').classList.toggle('active',mode==='pan');$('draw').classList.toggle('active',mode==='draw');$('draw').hidden=Boolean(drawing);$('finish').hidden=!drawing;$('cancel').hidden=!(drawing||mode.startsWith('visit')||mode.startsWith('marker'));
-  $('mode-hint').textContent=mode==='draw'?'그리기 모드 · 지도를 클릭해 점 추가 · 완료하면 확정':mode.startsWith('visit')?'방문 위치 선택 · 지도에서 원하는 위치를 클릭하세요':mode.startsWith('marker')?'참고 마커 위치 선택 · 지도에서 원하는 위치를 클릭하세요':'지도 이동 모드 · 경로 점을 끌어 이동할 수 있어요';
+  const isRouteEditing=mode==='draw';
+  $('pan').classList.toggle('active',mode==='pan');
+  $('pan').setAttribute('aria-pressed',String(mode==='pan'));
+  $('draw').classList.toggle('active',isRouteEditing);
+  $('draw').setAttribute('aria-pressed',String(isRouteEditing));
+  $('draw').hidden=Boolean(drawing);
+  $('draw').textContent=course.points.length>0?'⌁ 경로 편집':'⌁ 그리기 시작';
+  $('finish').hidden=!drawing;
+  $('cancel').hidden=!(drawing||mode.startsWith('visit')||mode.startsWith('marker'));
+  $('mode-hint').textContent=isRouteEditing?'경로 편집 모드 · 지도를 클릭해 점 추가 · 점을 끌어 이동하거나 ＋로 중간 삽입':mode.startsWith('visit')?'방문 위치 선택 · 지도에서 원하는 위치를 클릭하세요':mode.startsWith('marker')?'참고 마커 위치 선택 · 지도에서 원하는 위치를 클릭하세요':'지도 이동 모드 · 지도를 움직여 코스를 둘러보세요 (경로 수정: ‘경로 편집’ 선택)';
+  if($('route-mode-banner')){
+    $('route-mode-banner').classList.toggle('editing',isRouteEditing);
+    $('route-edit-btn').textContent=isRouteEditing?'✓ 편집 완료':'⌁ 경로 편집 시작';
+    $('route-mode-desc').textContent=isRouteEditing?'지도 클릭: 점 추가 · 점 끌기: 이동 · ＋: 중간 삽입':'편집 모드에서 점 끌기 및 ＋ 중간 삽입이 가능합니다.';
+  }
   for(const id of ['course-name','region','tags','speed','duplicate','visit-add','marker-add'])$(id).disabled=Boolean(drawing);
-  if(map)map.setOptions({disableDoubleClickZoom:mode==='draw',draggable:mode!=='draw'});status();
+  if(map)map.setOptions({disableDoubleClickZoom:isRouteEditing,draggable:mode!=='draw'});status();
 }
 function removePoint(i){mutate(c=>c.points.splice(i,1));selected=-1;renderPoints();renderMap();renderSelection();}
 function focus(p){if(mapReady&&p)map.panTo(new naver.maps.LatLng(p.lat,p.lng));}
@@ -104,31 +219,121 @@ function pickMarkerPosition(p){
 function renderMap(){
   if(!mapReady)return;overlays.forEach(o=>{naver.maps.Event.clearInstanceListeners(o);o.setMap(null);});overlays=[];
   const N=naver.maps, pos=p=>new N.LatLng(p.lat,p.lng);
-  if(course.points.length>1)overlays.push(new N.Polyline({map,path:course.points.map(pos),strokeColor:'#E32219',strokeWeight:4,strokeOpacity:.9,clickable:false}));
+  const isRouteEditing=mode==='draw';
+
+  if(course.points.length>1){
+    overlays.push(new N.Polyline({map,path:course.points.map(pos),strokeColor:'#E32219',strokeWeight:4,strokeOpacity:.9,clickable:false}));
+  }
+
+  // Feature 2: Direction arrows along segments
+  const arrows = routeArrows(course.points, selected);
+  arrows.forEach(arr=>{
+    const arrowContent=`<div class="route-arrow ${arr.active?'active selected':''}" style="transform: rotate(${Math.round(arr.angle)}deg);" aria-label="진행 방향 (${arr.index}번 → ${arr.index+1}번)" title="진행 방향 (${arr.index}번 → ${arr.index+1}번)"><svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M4 2.5 L10.5 7 L4 11.5" fill="none" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M4 2.5 L10.5 7 L4 11.5" fill="none" stroke="${arr.active?'#E32219':'#3F3F3C'}" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg></div>`;
+    const arrowMarker=new N.Marker({map,position:pos(arr.position),zIndex:80,clickable:false,icon:{content:arrowContent,anchor:new N.Point(7,7)}});
+    overlays.push(arrowMarker);
+  });
+
   course.points.forEach((p,i)=>{
     const endpoint=i===0||i===course.points.length-1;
-    const content=endpoint?`<div class="endpoint-marker ${i?'end':''}">${i?'도착':'출발'}</div>`:`<div class="route-marker ${selected===i?'selected':''}"></div>`;
-    const marker=new N.Marker({map,position:pos(p),draggable:true,zIndex:100,icon:{content,anchor:new N.Point(endpoint?24:8,endpoint?14:8)}});overlays.push(marker);
-    N.Event.addListener(marker,'click',()=>{if(pickVisitPosition(p))return;selected=i;selectTab('route');renderPoints();renderSelection();});
-    N.Event.addListener(marker,'dragend',()=>{const ll=marker.getPosition();mutate(c=>c.points[i]={lat:ll.lat(),lng:ll.lng()});});
-    if(i>0){const a=course.points[i-1],mid={lat:(a.lat+p.lat)/2,lng:(a.lng+p.lng)/2};const m=new N.Marker({map,position:pos(mid),zIndex:90,icon:{content:'<div class="insert-marker" title="중간 점 삽입">+</div>',anchor:new N.Point(9,9)}});overlays.push(m);
-      N.Event.addListener(m,'click',()=>{if(pickVisitPosition(mid))return;selected=i;mutate(c=>c.points.splice(i,0,mid));selectTab('route');renderSelection();});}
+    const content=endpoint
+      ?`<div class="endpoint-marker ${i?'end':''} ${isRouteEditing?'draggable':''}" title="${i?'도착점':'출발점'}${isRouteEditing?' (끌어서 이동)':''}">${i?'도착':'출발'}</div>`
+      :`<div class="route-marker ${selected===i?'selected':''} ${isRouteEditing?'draggable':''}" title="편집점 ${i+1}${isRouteEditing?' (끌어서 이동)':''}"></div>`;
+    const marker=new N.Marker({map,position:pos(p),draggable:isRouteEditing,zIndex:100,icon:{content,anchor:new N.Point(endpoint?24:8,endpoint?14:8)}});
+    overlays.push(marker);
+    N.Event.addListener(marker,'click',()=>{
+      if(pickVisitPosition(p)||pickMarkerPosition(p))return;
+      selected=i;
+      selectTab('route');
+      renderPoints();
+      renderSelection();
+      renderMap();
+    });
+    if(isRouteEditing){
+      N.Event.addListener(marker,'dragend',()=>{
+        const ll=marker.getPosition();
+        mutate(c=>c.points[i]={lat:ll.lat(),lng:ll.lng()});
+      });
+    }
+
+    // Feature 1: Intermediate + controls ONLY active and shown during route edit mode
+    if(isRouteEditing&&i>0){
+      const a=course.points[i-1], b=p;
+      const mid={lat:(a.lat+b.lat)/2,lng:(a.lng+b.lng)/2};
+      const m=new N.Marker({map,position:pos(mid),zIndex:90,icon:{content:'<div class="insert-marker" title="중간 점 삽입">+</div>',anchor:new N.Point(9,9)}});
+      overlays.push(m);
+      N.Event.addListener(m,'click',()=>{if(pickVisitPosition(mid))return;selected=i;mutate(c=>c.points.splice(i,0,mid));selectTab('route');renderSelection();});
+    }
   });
-  const occupied=[];
+
+  // Feature 3: Visits with detachable pin-to-label connectors
   (course.visits||[]).forEach((v,i)=>{
-    const pixel=map.getProjection().fromCoordToOffset(pos(v));
-    const width=Math.min(220,75+v.name.length*12),rect={x:Math.max(8,Math.min(pixel.x,$('map').clientWidth-width-8)),y:pixel.y<55?pixel.y+18:pixel.y-42,w:width,h:36};
-    const collision=occupied.some(r=>rect.x<r.x+r.w&&rect.x+rect.w>r.x&&rect.y<r.y+r.h&&rect.y+rect.h>r.y);
-    if(!collision)occupied.push(rect);
-    const content=collision?`<div class="visit-dot" title="${esc(v.name)} · ${v.stay}분">${i+1}</div>`:`<div class="visit-map" style="width:${width}px" title="${esc(v.name)} · ${v.stay}분"><b>${i+1}</b><span>${esc(v.name)}</span><em>${v.stay}분</em></div>`;
-    const marker=new N.Marker({map,position:pos(v),zIndex:200+i,icon:{content,anchor:new N.Point(collision?12:pixel.x-rect.x,collision?12:pixel.y-rect.y)}});overlays.push(marker);N.Event.addListener(marker,'click',()=>editVisit(i));
+    const isDetached=v.labelOffsetX!==undefined||v.labelOffsetY!==undefined||v.labelOffset!==undefined;
+    const lx=v.labelOffsetX!==undefined?v.labelOffsetX:(v.labelOffset?.x??0);
+    const ly=v.labelOffsetY!==undefined?v.labelOffsetY:(v.labelOffset?.y??-30);
+    const width=Math.min(220,75+v.name.length*12);
+
+    const content=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="geo-pin visit-pin" title="${esc(v.name)} · ${v.stay}분"><span>${i+1}</span></div><svg class="pin-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${isDetached?'':'display:none;'}"><line x1="0" y1="0" x2="${lx}" y2="${ly}" stroke="#50504C" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="0" cy="0" r="2.5" fill="#50504C"/><circle cx="${lx}" cy="${ly}" r="2" fill="#50504C"/></svg><div class="visit-map detachable-label ${isDetached?'detached':''}" style="position:absolute;left:${lx}px;top:${ly}px;width:${width}px;" title="${esc(v.name)} · ${v.stay}분 (라벨을 끌어서 분리)"><b>${i+1}</b><span>${esc(v.name)}</span><em>${v.stay}분</em></div></div>`;
+
+    const marker=new N.Marker({map,position:pos(v),zIndex:200+i,icon:{content,anchor:new N.Point(0,0)}});
+    overlays.push(marker);
+
+    const el=marker.getElement?marker.getElement():marker.el;
+    if(el){
+      const labelEl=el.querySelector('.detachable-label');
+      const leaderEl=el.querySelector('.pin-leader');
+      if(labelEl&&leaderEl){
+        setupLabelDrag(labelEl,leaderEl,()=>({
+          x:lx,
+          y:ly
+        }),(newX,newY)=>{
+          mutate(c=>{
+            if(newX===undefined){delete c.visits[i].labelOffsetX;delete c.visits[i].labelOffsetY;delete c.visits[i].labelOffset;}
+            else{c.visits[i].labelOffsetX=newX;c.visits[i].labelOffsetY=newY;delete c.visits[i].labelOffset;}
+          });
+          toast(newX===undefined?'방문 라벨이 기본 위치로 연결되었습니다.':'방문 라벨 위치를 이동했습니다.');
+        });
+      }
+    }
+    N.Event.addListener(marker,'click',()=>editVisit(i));
   });
+
+  // Feature 3: Reference markers with detachable pin-to-label connectors
   (course.markers||[]).forEach((m,i)=>{
     const cat=CATEGORY_MAP[m.category]||{label:m.category||'참고장소',icon:'⚐'};
-    const content=`<div class="course-ref-marker ${esc(m.category||'spot')}${markerEditing?.index===i?' selected':''}" title="${esc(m.name)} · ${esc(cat.label)}"><span class="ref-icon">${cat.icon}</span><span class="ref-name">${esc(m.name)}</span></div>`;
-    const marker=new N.Marker({map,position:pos(m),zIndex:150+i,icon:{content,anchor:new N.Point(12,12)}});overlays.push(marker);
-    N.Event.addListener(marker,'click',()=>{if(pickMarkerPosition(m)||pickVisitPosition(m))return;selectTab('markers');editMarker(i);});
+    const isDetached=m.labelOffsetX!==undefined||m.labelOffsetY!==undefined||m.labelOffset!==undefined;
+    const lx=m.labelOffsetX!==undefined?m.labelOffsetX:(m.labelOffset?.x??0);
+    const ly=m.labelOffsetY!==undefined?m.labelOffsetY:(m.labelOffset?.y??-26);
+
+    const content=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="geo-pin marker-pin ${esc(m.category||'spot')}" title="${esc(m.name)} · ${esc(cat.label)}"><span>${cat.icon}</span></div><svg class="pin-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${isDetached?'':'display:none;'}"><line x1="0" y1="0" x2="${lx}" y2="${ly}" stroke="#50504C" stroke-width="1.5" stroke-dasharray="4 2"/><circle cx="0" cy="0" r="2.5" fill="#50504C"/><circle cx="${lx}" cy="${ly}" r="2" fill="#50504C"/></svg><div class="course-ref-marker detachable-label ${isDetached?'detached':''} ${esc(m.category||'spot')}${markerEditing?.index===i?' selected':''}" style="position:absolute;left:${lx}px;top:${ly}px;" title="${esc(m.name)} · ${esc(cat.label)} (라벨을 끌어서 분리)"><span class="ref-icon">${cat.icon}</span><span class="ref-name">${esc(m.name)}</span></div></div>`;
+
+    const marker=new N.Marker({map,position:pos(m),zIndex:150+i,icon:{content,anchor:new N.Point(0,0)}});
+    overlays.push(marker);
+
+    const el=marker.getElement?marker.getElement():marker.el;
+    if(el){
+      const labelEl=el.querySelector('.detachable-label');
+      const leaderEl=el.querySelector('.pin-leader');
+      if(labelEl&&leaderEl){
+        setupLabelDrag(labelEl,leaderEl,()=>({
+          x:lx,
+          y:ly
+        }),(newX,newY)=>{
+          mutate(c=>{
+            c.markers=c.markers||[];
+            if(newX===undefined){delete c.markers[i].labelOffsetX;delete c.markers[i].labelOffsetY;delete c.markers[i].labelOffset;}
+            else{c.markers[i].labelOffsetX=newX;c.markers[i].labelOffsetY=newY;delete c.markers[i].labelOffset;}
+          });
+          toast(newX===undefined?'마커 라벨이 기본 위치로 연결되었습니다.':'마커 라벨 위치를 이동했습니다.');
+        });
+      }
+    }
+    N.Event.addListener(marker,'click',()=>{
+      if(pickMarkerPosition(m)||pickVisitPosition(m))return;
+      selectTab('markers');
+      editMarker(i);
+    });
   });
+
   renderSelection();
 }
 async function initMap(){
@@ -156,11 +361,33 @@ async function initMap(){
 function editVisit(index,position){
   if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');
   visitsEditing={index,position};const v=index>=0?course.visits[index]:{name:'',stay:15,memo:'',link:''};const f=$('visit-form');
-  for(const key of ['name','stay','memo','link'])f.elements[key].value=v[key];f.elements.order.value=index>=0?index+1:course.visits.length+1;f.elements.order.max=course.visits.length+(index<0?1:0);$('visit-remove').hidden=index<0;$('visit-dialog-title').textContent=index<0?'새로운 방문 장소':'방문 장소 수정';$('visit-dialog').showModal();
+  for(const key of ['name','stay','memo','link'])f.elements[key].value=v[key];f.elements.order.value=index>=0?index+1:course.visits.length+1;f.elements.order.max=course.visits.length+(index<0?1:0);$('visit-remove').hidden=index<0;$('visit-dialog-title').textContent=index<0?'새로운 방문 장소':'방문 장소 수정';
+  if($('visit-label-offset-field'))$('visit-label-offset-field').hidden=!(v.labelOffsetX!==undefined&&v.labelOffsetY!==undefined);
+  $('visit-dialog').showModal();
 }
+$('visit-label-reset').onclick=()=>{
+  if(visitsEditing&&visitsEditing.index>=0){
+    mutate(c=>{
+      delete c.visits[visitsEditing.index].labelOffsetX;
+      delete c.visits[visitsEditing.index].labelOffsetY;
+      delete c.visits[visitsEditing.index].labelOffset;
+    });
+    toast('방문 라벨 위치를 기본 위치로 초기화했습니다.');
+  }
+  if($('visit-label-offset-field'))$('visit-label-offset-field').hidden=true;
+};
 $('visit-form').onsubmit=e=>{
   e.preventDefault();const form=e.target,index=visitsEditing.index,order=Number(form.elements.order.value)-1;
+  const existingV=index>=0?course.visits[index]:null;
   const v={...(index>=0?course.visits[index]:{...visitsEditing.position,id:crypto.randomUUID(),source:'user'}),name:form.elements.name.value.trim(),stay:Number(form.elements.stay.value),memo:form.elements.memo.value,link:form.elements.link.value.trim()};
+  if(existingV&&existingV.labelOffsetX!==undefined&&!$('visit-label-offset-field').hidden){
+    v.labelOffsetX=existingV.labelOffsetX;
+    v.labelOffsetY=existingV.labelOffsetY;
+  }else{
+    delete v.labelOffsetX;
+    delete v.labelOffsetY;
+    delete v.labelOffset;
+  }
   try{const next=clone(course);if(index>=0)next.visits.splice(index,1);next.visits.splice(order,0,v);validateCourse(next);commit(next);$('visit-dialog').close();}catch(e){toast(e.message);}
 };
 $('visit-remove').onclick=()=>{if(confirm('이 방문 장소를 삭제할까요? 실행 취소로 복구할 수 있습니다.')){mutate(c=>c.visits.splice(visitsEditing.index,1));$('visit-dialog').close();}};
@@ -171,11 +398,25 @@ function editMarker(index,position){
   if(drawing)return toast('경로 그리기를 먼저 완료해 주세요.');
   markerEditing={index,position};const m=index>=0?(course.markers||[])[index]:{name:'',category:'cafe',address:'',naverLink:''};const f=$('marker-form');
   for(const key of ['name','category','address'])f.elements[key].value=m[key]||'';f.elements.naverLink.value=m.naverLink||'';
-  $('marker-remove').hidden=index<0;$('marker-dialog-title').textContent=index<0?'새로운 참고 마커':'참고 마커 수정';$('marker-dialog').showModal();
+  $('marker-remove').hidden=index<0;$('marker-dialog-title').textContent=index<0?'새로운 참고 마커':'참고 마커 수정';
+  if($('marker-label-offset-field'))$('marker-label-offset-field').hidden=!(m.labelOffsetX!==undefined&&m.labelOffsetY!==undefined);
+  $('marker-dialog').showModal();
 }
+$('marker-label-reset').onclick=()=>{
+  if(markerEditing&&markerEditing.index>=0){
+    mutate(c=>{
+      delete (c.markers=c.markers||[])[markerEditing.index].labelOffsetX;
+      delete c.markers[markerEditing.index].labelOffsetY;
+      delete c.markers[markerEditing.index].labelOffset;
+    });
+    toast('마커 라벨 위치를 기본 위치로 초기화했습니다.');
+  }
+  if($('marker-label-offset-field'))$('marker-label-offset-field').hidden=true;
+};
 $('marker-form').onsubmit=e=>{
   e.preventDefault();const form=e.target,index=markerEditing.index;
   const link=form.elements.naverLink.value.trim();
+  const existingM=index>=0?(course.markers||[])[index]:null;
   const m={
     ...(index>=0?course.markers[index]:{...markerEditing.position,id:crypto.randomUUID()}),
     name:form.elements.name.value.trim(),
@@ -183,6 +424,14 @@ $('marker-form').onsubmit=e=>{
     address:form.elements.address.value.trim()
   };
   if(link)m.naverLink=link;else delete m.naverLink;
+  if(existingM&&existingM.labelOffsetX!==undefined&&!$('marker-label-offset-field').hidden){
+    m.labelOffsetX=existingM.labelOffsetX;
+    m.labelOffsetY=existingM.labelOffsetY;
+  }else{
+    delete m.labelOffsetX;
+    delete m.labelOffsetY;
+    delete m.labelOffset;
+  }
   try{
     const next=clone(course);next.markers=next.markers||[];
     if(index>=0)next.markers[index]=m;else next.markers.push(m);
@@ -199,10 +448,10 @@ $('marker-add').onclick=()=>{
   if((course.markers||[]).length>=100)return toast('참고 마커는 최대 100개입니다.');
   mode='marker';renderMode();$('map').scrollIntoView({behavior:'smooth',block:'center'});
 };
-$('pan').onclick=()=>{if(drawing)return toast('진행 중인 그리기를 완료하거나 취소해 주세요.');mode='pan';renderMode();};
-$('draw').onclick=()=>{if(pendingDraft)return toast('이전 임시저장을 먼저 복원하거나 버려 주세요.');if(!mapReady)return toast('지도가 연결된 뒤 경로를 그릴 수 있습니다.');drawing={course:clone(course),past:clone(history.past),future:clone(history.future)};mode='draw';selected=-1;selectTab('route');renderMode();renderMap();};
-$('finish').onclick=()=>{drawing=null;mode='pan';renderMode();persistDraft();};
-$('cancel').onclick=()=>{if(drawing){course=drawing.course;history.current=clone(course);history.past=drawing.past;history.future=drawing.future;drawing=null;renderAll();persistDraft();}mode='pan';renderMode();};
+$('pan').onclick=()=>{if(drawing)return toast('진행 중인 그리기를 완료하거나 취소해 주세요.');mode='pan';renderMode();renderMap();};
+$('draw').onclick=()=>{if(pendingDraft)return toast('이전 임시저장을 먼저 복원하거나 버려 주세요.');if(!mapReady)return toast('지도가 연결된 뒤 경로를 그릴 수 있습니다.');drawing={course:clone(course),past:clone(history.past),future:clone(history.future)};mode='draw';selected=-1;selectTab('route');renderMode();renderMap();$('finish')?.focus();};
+$('finish').onclick=()=>{drawing=null;mode='pan';renderMode();renderMap();persistDraft();$('draw')?.focus();};
+$('cancel').onclick=()=>{if(drawing){course=drawing.course;history.current=clone(course);history.past=drawing.past;history.future=drawing.future;drawing=null;renderAll();persistDraft();}mode='pan';renderMode();renderMap();$('draw')?.focus();};
 $('undo').onclick=()=>{course=history.undo();selected=-1;renderAll();persistDraft();};$('redo').onclick=()=>{course=history.redo();selected=-1;renderAll();persistDraft();};
 $('fit').onclick=fit;$('selection-delete').onclick=()=>removePoint(selected);$('selection-close').onclick=()=>{selected=-1;renderSelection();renderPoints();};
 for(const t of ['visits','markers','route'])$(`tab-${t}`).onclick=()=>selectTab(t);
@@ -348,7 +597,18 @@ $('logout').onclick=async()=>{
   }catch(e){toast(e.message);}
 };
 window.addEventListener('beforeunload',e=>{if(user&&dirty()){persistDraft();e.preventDefault();e.returnValue='';}});
-window.addEventListener('keydown',e=>{if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();if(user&&!saving)$('save').click();}if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&!['INPUT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();if(user&&!saving)$(e.shiftKey?'redo':'undo').click();}});
+if($('route-edit-btn')){$('route-edit-btn').onclick=()=>{if(mode==='draw')$('finish').click();else $('draw').click();};}
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    if(mode==='draw'){e.preventDefault();$('finish').click();}
+    else if(mode.startsWith('visit')||mode.startsWith('marker')){e.preventDefault();mode='pan';renderMode();toast('위치 선택을 취소했습니다.');}
+  }
+  if(e.key==='Enter'&&mode==='draw'&&!['INPUT','TEXTAREA','BUTTON'].includes(e.target.tagName)){
+    e.preventDefault();$('finish').click();
+  }
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='s'){e.preventDefault();if(user&&!saving)$('save').click();}
+  if((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='z'&&!['INPUT','TEXTAREA'].includes(e.target.tagName)){e.preventDefault();if(user&&!saving)$(e.shiftKey?'redo':'undo').click();}
+});
 
 watchAuthState(async (activeUser)=>{
   const loading=$('auth-loading');if(loading)loading.hidden=true;

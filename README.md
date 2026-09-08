@@ -23,6 +23,15 @@ Firebase Authentication·Firestore를 백엔드로 사용하고 GitHub Pages를 
   - 하위 호환성: 기존 코스 문서에 저장된 레거시 `course.markers` 배열을 안전하게 불러오며, 저장 시 서브컬렉션으로 안전하게 마이그레이션하고 레거시 데이터를 무단 삭제하지 않습니다.
   - 장소 검색 결과에서 “마커로 저장”하거나 지도에서 직접 추가할 수 있으며, 카테고리별 구분 아이콘(CSS/HTML)을 제공합니다.
 - **장소 검색**: 무료 플랜 유지로 현재 비활성화되어 있습니다. 네이버 검색은 브라우저에 비밀키를 노출할 수 없으므로, 검색 기능을 다시 켜려면 Blaze 플랜과 Cloud Functions Secret Manager가 필요합니다.
+- **경로 편집 모드 및 진행방향 표시 (Route Editing & Direction)**:
+  - **편집 모드 경계 (Route Editing Mode Boundaries)**: 일반 지도 탐색(pan) 모드에서는 경로 점 드래그와 중간 삽입(+) 컨트롤이 비활성화되며 점 클릭 시 사이드바에서 선택만 수행됩니다. 경로 편집/추가 모드(`draw`)에서만 점 끌어 이동 및 중간 삽입이 활성화됩니다. `#draw`/`#pan` 버튼 상태 및 `aria-pressed`, 모드 힌트 안내, 포커스 전환(`draw` 진입 시 `#finish` 포커스, 완료/취소 시 `#draw` 복귀), `Escape` 키보드 단축키를 통한 안전한 편집 종료를 지원합니다.
+  - **진행방향 안내 (Segment Direction Arrows)**: 출발점에서 도착점으로 이어지는 경로 세그먼트의 진행 방향을 화면 투영 각도(`segmentAngle`)로 계산하여 화살표 배지(세그먼트 58% 지점)로 표시합니다. 8m 미만의 초단거리 세그먼트는 화살표를 생략하며, 선택된 편집점에 연결된 세그먼트는 강조색(`--accent-red`)으로 표시됩니다.
+- **분리형 핀-라벨 리더선 (Detachable Pin-to-Label Connectors)**:
+  - 방문 장소 및 참고 마커의 지리적 좌표 핀은 고정된 채 라벨을 드래그하여 오프셋(`labelOffsetX`, `labelOffsetY`, 범위 `[-400, 400]`)을 조절할 수 있습니다.
+  - 핀과 라벨 사이를 SVG 점선 리더선(`stroke-dasharray: 3 3`)으로 실시간 연결하며, 12px 미만으로 이동 시 리더선과 분리 핀이 숨겨지는 기본 밀착 레이아웃으로 자동 전환됩니다.
+  - 4px 이하 터치/클릭은 편집 다이얼로그를 열고, 4px 초과 이동 시 오프셋을 자동 영구 저장합니다.
+  - 사이드바 카드("라벨 초기화") 및 편집 다이얼로그("라벨 위치 초기화")에서 기본 위치로 원클릭 복원할 수 있습니다.
+  - Firestore 보안 규칙 및 데이터 모델(`validateCourse`, `validateMarker`)에서 `[-500, 500]` 경계 검증을 지원합니다.
 - **레거시 런타임 (SQLite / Node server)**:
   - 기존 `server.mjs`, `manage.mjs` 및 `tests/core.test.mjs`는 테스트 및 로컬 참조용으로 격리 유지되며, GitHub Pages 빌드 아티팩트에는 포함되지 않습니다.
 
