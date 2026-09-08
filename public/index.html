@@ -1,12 +1,12 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WalkMap · 나만의 포토워크</title><link rel="stylesheet" href="/style.css"><script type="module" src="/app.mjs"></script></head>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>WalkMap · 나만의 포토워크</title><link rel="stylesheet" href="./style.css"><script type="module" src="./app.mjs"></script></head>
 <body>
 <section id="login-screen" class="login-screen">
   <div class="login-art"><div class="wordmark">w<span>↗</span> WalkMap</div><div class="intro"><p class="eyebrow">A WALK WORTH KEEPING</p><h1>좋은 사진은,<br>걷는 길에서.</h1><p>머물고 싶은 장소와 그 사이의 길.<br>나만의 포토워크를 한 장의 지도에 담아보세요.</p><div class="abstract-route" aria-hidden="true"><span>출발</span><i></i><b>도착</b></div></div><small>PLAN YOUR WALK. FIND YOUR FRAME.</small></div>
-  <div class="login-form-wrap"><form id="login-form"><p class="eyebrow">YOUR WALKING STUDIO</p><h2>나의 코스로 들어가기</h2><p class="muted">저장한 코스는 내 계정에서만 볼 수 있어요.</p><label>아이디<input name="username" autocomplete="username" required maxlength="40"></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" required maxlength="200"></label><button class="primary wide">로그인 →</button><p id="login-error" role="alert"></p><p class="small muted">처음 사용하나요? README의 계정 만들기를 따라<br>이 서버에 개인 계정을 추가해 주세요.</p></form></div>
+  <div class="login-form-wrap"><form id="login-form"><p class="eyebrow">YOUR WALKING STUDIO</p><h2>나의 코스로 들어가기</h2><p class="muted">저장한 코스는 내 계정에서만 볼 수 있어요.</p><label>아이디<input name="username" autocomplete="username" required maxlength="40"></label><label>비밀번호<input name="password" type="password" autocomplete="current-password" required maxlength="200"></label><button class="primary wide">로그인 →</button><p id="login-error" role="alert"></p><p class="small muted">처음 사용하나요? README의 계정 만들기를 따라<br>Firebase Auth에 개인 계정을 추가해 주세요.</p></form></div>
 </section>
 <div id="app" hidden>
-<header class="topbar"><a class="brand" href="/" aria-label="WalkMap 홈">w<span>↗</span><strong>WalkMap</strong></a><span class="header-caption">나만의 포토워크 스튜디오</span><nav><button id="library-open">▤ 내 코스</button><button id="new-course">＋ 새 코스</button><button id="save" class="primary">코스 저장</button><button id="logout" class="quiet">로그아웃</button></nav></header>
+<header class="topbar"><a class="brand" href="./" aria-label="WalkMap 홈">w<span>↗</span><strong>WalkMap</strong></a><span class="header-caption">나만의 포토워크 스튜디오</span><nav><button id="library-open">▤ 내 코스</button><button id="new-course">＋ 새 코스</button><button id="save" class="primary">코스 저장</button><button id="logout" class="quiet">로그아웃</button></nav></header>
 <main class="workspace">
 <aside class="editor">
   <div class="course-heading"><div class="row"><span class="eyebrow">WALK PLANNER</span><span id="save-state" class="status" role="status">새 코스</span></div><label class="sr-only" for="course-name">코스 이름</label><input id="course-name" class="title-input" maxlength="100" aria-label="코스 이름"><p class="subtitle">한 걸음씩, 나만의 시선으로.</p></div>

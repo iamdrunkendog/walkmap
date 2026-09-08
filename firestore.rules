@@ -1,0 +1,54 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Deny all by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    match /users/{userId}/courses/{courseId} {
+      // Only authenticated user matching the path userId can read
+      allow read: if request.auth != null && request.auth.uid == userId;
+
+      // Only owner can create with version 1 and valid schema
+      allow create: if request.auth != null
+        && request.auth.uid == userId
+        && courseId == request.resource.data.id
+        && request.resource.data.version == 1
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.speed is number
+        && request.resource.data.speed >= 0.5
+        && request.resource.data.speed <= 10
+        && request.resource.data.points is list
+        && request.resource.data.points.size() <= 2000
+        && request.resource.data.visits is list
+        && request.resource.data.visits.size() <= 100
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 20;
+
+      // Only owner can update, must strictly increment version by 1
+      allow update: if request.auth != null
+        && request.auth.uid == userId
+        && courseId == request.resource.data.id
+        && request.resource.data.version == resource.data.version + 1
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 100
+        && request.resource.data.speed is number
+        && request.resource.data.speed >= 0.5
+        && request.resource.data.speed <= 10
+        && request.resource.data.points is list
+        && request.resource.data.points.size() <= 2000
+        && request.resource.data.visits is list
+        && request.resource.data.visits.size() <= 100
+        && request.resource.data.tags is list
+        && request.resource.data.tags.size() <= 20;
+
+      // Only owner can delete
+      allow delete: if request.auth != null && request.auth.uid == userId;
+    }
+  }
+}
