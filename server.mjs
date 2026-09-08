@@ -33,7 +33,10 @@ export function normalizePlace(item) {
   const coord=(v,limit)=>{let n=Number(v); if(Math.abs(n)>limit)n/=1e7;return n;};
   const lat=coord(item.mapy,90),lng=coord(item.mapx,180);
   if(!Number.isFinite(lat)||!Number.isFinite(lng)||Math.abs(lat)>90||Math.abs(lng)>180||(!lat&&!lng))return null;
-  return {title:String(item.title||'').replace(/<[^>]*>/g,''), address:String(item.roadAddress||item.address||''),lat,lng,source:'naver-search'};
+  const res={title:String(item.title||'').replace(/<[^>]*>/g,''), address:String(item.roadAddress||item.address||''),lat,lng,source:'naver-search'};
+  if(item.category&&typeof item.category==='string'){const c=item.category.replace(/<[^>]*>/g,'').trim(); if(c)res.category=c;}
+  if(item.link&&typeof item.link==='string'){try{const u=new URL(item.link.trim());if(u.protocol==='https:'&&!u.username&&!u.password)res.link=item.link.trim();}catch{}}
+  return res;
 }
 export async function searchPlaces(query,fetcher=fetch) {
   if(!process.env.NAVER_SEARCH_CLIENT_ID||!process.env.NAVER_SEARCH_CLIENT_SECRET)throw error(503,'SEARCH_CONFIG','장소 검색 인증 설정이 필요합니다.');

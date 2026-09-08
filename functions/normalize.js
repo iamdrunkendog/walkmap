@@ -10,11 +10,25 @@ export function normalizePlace(item) {
   if (!Number.isFinite(lat) || !Number.isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (!lat && !lng)) {
     return null;
   }
-  return {
+  const result = {
     title: String(item.title || '').replace(/<[^>]*>/g, ''),
     address: String(item.roadAddress || item.address || ''),
     lat,
     lng,
     source: 'naver-search'
   };
+  if (item.category && typeof item.category === 'string') {
+    const cleanCat = item.category.replace(/<[^>]*>/g, '').trim();
+    if (cleanCat) result.category = cleanCat;
+  }
+  if (item.link && typeof item.link === 'string') {
+    const rawLink = item.link.trim();
+    try {
+      const u = new URL(rawLink);
+      if (u.protocol === 'https:' && !u.username && !u.password) {
+        result.link = rawLink;
+      }
+    } catch {}
+  }
+  return result;
 }

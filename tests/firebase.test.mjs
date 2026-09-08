@@ -24,22 +24,53 @@ test('deterministic internal email mapping preserves username and account semant
   assert.throws(() => usernameToEmail('한글아이디'), /아이디는 3–40자/);
 });
 
-test('Firestore concurrency & version conflict logic prevents silent overwrites', async () => {
-  // Simulate Firestore transaction store for user courses
+test('Firestore concurrency & version conflict logic prevents silent overwrites with subcollection marker storage', async () => {
+  // Simulate Firestore transaction store for user courses and marker subcollections
   const store = new Map();
+
+  async function simulateFetchCourse(uid, courseId) {
+    const key = `users/${uid}/courses/${courseId}`;
+    const courseDoc = store.get(key);
+    if (!courseDoc) {
+      throw Object.assign(new Error('코스를 찾을 수 없습니다.'), { code: 'NOT_FOUND' });
+    }
+    const course = structuredClone(courseDoc);
+    // Find all subcollection markers under users/${uid}/courses/${courseId}/markers/
+    const markerPrefix = `users/${uid}/courses/${courseId}/markers/`;
+    const subMarkers = [];
+    for (const [k, v] of store.entries()) {
+      if (k.startsWith(markerPrefix)) {
+        subMarkers.push(structuredClone(v));
+      }
+    }
+    if (subMarkers.length > 0) {
+      course.markers = subMarkers;
+    } else if (Array.isArray(course.markers)) {
+      // Backward compatibility: load legacy embedded course.markers
+    } else {
+      course.markers = [];
+    }
+    return course;
+  }
 
   async function simulateSaveCourse(uid, rawCourse, baseVersion) {
     const c = validateCourse({ ...rawCourse, version: baseVersion });
-    const key = `users/${uid}/courses/${c.id}`;
-    const existing = store.get(key);
+    const courseKey = `users/${uid}/courses/${c.id}`;
+    const existing = store.get(courseKey);
+
+    const markerPrefix = `users/${uid}/courses/${c.id}/markers/`;
+    const existingMarkerKeys = new Set([...store.keys()].filter(k => k.startsWith(markerPrefix)));
+
+    const nextVersion = baseVersion + 1;
+    const updated = new Date().toISOString();
+    const { markers, ...courseDocData } = c;
 
     if (baseVersion === 0) {
       if (existing) {
         throw Object.assign(new Error('이미 저장된 코스입니다.'), { code: 'CONFLICT' });
       }
-      const saved = { ...c, version: 1, updated: new Date().toISOString() };
-      store.set(key, saved);
-      return saved;
+      // Course document does NOT embed markers array on new writes
+      store.set(courseKey, { ...courseDocData, version: 1, updated });
     } else {
       if (!existing) {
         throw Object.assign(new Error('코스가 삭제되었거나 접근할 수 없습니다.'), { code: 'NOT_FOUND' });
@@ -47,33 +78,74 @@ test('Firestore concurrency & version conflict logic prevents silent overwrites'
       if (existing.version !== baseVersion) {
         throw Object.assign(new Error('다른 창에서 수정되었습니다.'), { code: 'CONFLICT' });
       }
-      const nextVersion = baseVersion + 1;
-      const saved = { ...c, version: nextVersion, updated: new Date().toISOString() };
-      store.set(key, saved);
-      return saved;
+      // Update course document: preserve legacy embedded markers if present, but do not add new embedded markers
+      const nextDoc = { ...courseDocData, version: nextVersion, updated };
+      if (existing.markers) nextDoc.markers = existing.markers;
+      store.set(courseKey, nextDoc);
     }
+
+    // Subcollection diffing: delete removed markers
+    const currentMarkerKeys = new Set((markers || []).map(m => `${markerPrefix}${m.id}`));
+    for (const oldKey of existingMarkerKeys) {
+      if (!currentMarkerKeys.has(oldKey)) {
+        store.delete(oldKey);
+      }
+    }
+    // Subcollection write: write current markers as separate documents
+    for (const m of (markers || [])) {
+      store.set(`${markerPrefix}${m.id}`, structuredClone(m));
+    }
+
+    return { ...c, version: baseVersion === 0 ? 1 : nextVersion, updated };
   }
 
   async function simulateDeleteCourse(uid, courseId, expectedVersion) {
-    const key = `users/${uid}/courses/${courseId}`;
-    const existing = store.get(key);
+    const courseKey = `users/${uid}/courses/${courseId}`;
+    const existing = store.get(courseKey);
     if (!existing) {
       throw Object.assign(new Error('코스를 찾을 수 없습니다.'), { code: 'NOT_FOUND' });
     }
     if (existing.version !== expectedVersion) {
       throw Object.assign(new Error('다른 창에서 수정된 코스입니다.'), { code: 'CONFLICT' });
     }
-    store.delete(key);
+    // Delete all marker subcollection documents atomically with course doc
+    const markerPrefix = `users/${uid}/courses/${courseId}/markers/`;
+    for (const k of [...store.keys()]) {
+      if (k.startsWith(markerPrefix)) {
+        store.delete(k);
+      }
+    }
+    store.delete(courseKey);
     return { ok: true };
   }
 
   const c = emptyCourse();
   c.name = '테스트 산책길';
   c.points = [{ lat: 37.57, lng: 126.98 }, { lat: 37.58, lng: 126.98 }];
+  const m1 = { id: crypto.randomUUID(), name: '세미나실', category: 'seminar', address: '서울 종로구', lat: 37.575, lng: 126.985, naverLink: 'https://place.naver.com/seminar' };
+  c.markers = [m1];
 
   // 1. Initial save: baseVersion 0 -> version 1
   const saved1 = await simulateSaveCourse('user-a', c, 0);
   assert.equal(saved1.version, 1);
+  assert.equal(saved1.markers.length, 1);
+  assert.equal(saved1.markers[0].name, '세미나실');
+
+  // Verify course document does NOT have embedded markers array
+  const rawDoc = store.get(`users/user-a/courses/${c.id}`);
+  assert.equal(rawDoc.markers, undefined, 'New writes must not embed markers array in course document');
+  assert.equal(rawDoc.version, 1);
+
+  // Verify marker document exists in the subcollection
+  const rawMarkerDoc = store.get(`users/user-a/courses/${c.id}/markers/${m1.id}`);
+  assert.ok(rawMarkerDoc, 'Marker must be stored in subcollection users/{uid}/courses/{courseId}/markers/{markerId}');
+  assert.equal(rawMarkerDoc.id, m1.id);
+  assert.equal(rawMarkerDoc.name, '세미나실');
+
+  // Verify simulateFetchCourse reconstructs markers from subcollection
+  const fetched = await simulateFetchCourse('user-a', c.id);
+  assert.equal(fetched.markers.length, 1);
+  assert.equal(fetched.markers[0].name, '세미나실');
 
   // 2. Duplicate create with version 0 must throw CONFLICT
   await assert.rejects(() => simulateSaveCourse('user-a', c, 0), e => e.code === 'CONFLICT');
@@ -82,21 +154,64 @@ test('Firestore concurrency & version conflict logic prevents silent overwrites'
   await assert.rejects(() => simulateSaveCourse('user-a', { ...c, name: '충돌 수정' }, 0), e => e.code === 'CONFLICT');
 
   // 4. Update with matching version 1 succeeds and increments to version 2
-  const updated1 = await simulateSaveCourse('user-a', { ...saved1, name: '수정된 코스' }, 1);
+  // Add a second marker
+  const m2 = { id: crypto.randomUUID(), name: '삼청 카페', category: 'cafe', address: '서울 삼청동', lat: 37.58, lng: 126.98, naverLink: 'https://place.naver.com/cafe' };
+  const updated1 = await simulateSaveCourse('user-a', { ...saved1, name: '수정된 코스', markers: [m1, m2] }, 1);
   assert.equal(updated1.version, 2);
+  assert.equal(updated1.markers.length, 2);
+  assert.ok(store.has(`users/user-a/courses/${c.id}/markers/${m2.id}`));
 
-  // 5. Stale update with previous version 1 must throw CONFLICT
-  await assert.rejects(() => simulateSaveCourse('user-a', { ...saved1, name: '지연된 저장' }, 1), e => e.code === 'CONFLICT');
+  // 5. Update deleting a marker diffs and removes it from the subcollection
+  const updated2 = await simulateSaveCourse('user-a', { ...updated1, markers: [m2] }, 2);
+  assert.equal(updated2.version, 3);
+  assert.equal(updated2.markers.length, 1);
+  assert.ok(!store.has(`users/user-a/courses/${c.id}/markers/${m1.id}`), 'Removed marker deleted from subcollection');
+  assert.ok(store.has(`users/user-a/courses/${c.id}/markers/${m2.id}`), 'Retained marker persists in subcollection');
 
-  // 6. Delete with stale version throws CONFLICT
-  await assert.rejects(() => simulateDeleteCourse('user-a', c.id, 1), e => e.code === 'CONFLICT');
+  // 6. Stale update with previous version 2 must throw CONFLICT
+  await assert.rejects(() => simulateSaveCourse('user-a', { ...updated1, name: '지연된 저장' }, 2), e => e.code === 'CONFLICT');
 
-  // 7. Delete with correct version succeeds
-  const deleteResult = await simulateDeleteCourse('user-a', c.id, 2);
+  // 7. Delete with stale version throws CONFLICT
+  await assert.rejects(() => simulateDeleteCourse('user-a', c.id, 2), e => e.code === 'CONFLICT');
+
+  // 8. Delete with correct version succeeds and deletes subcollection markers atomically
+  const deleteResult = await simulateDeleteCourse('user-a', c.id, 3);
   assert.equal(deleteResult.ok, true);
+  assert.ok(!store.has(`users/user-a/courses/${c.id}`));
+  assert.ok(!store.has(`users/user-a/courses/${c.id}/markers/${m2.id}`), 'Subcollection markers must be deleted with course');
 
-  // 8. Delete non-existent course throws NOT_FOUND
-  await assert.rejects(() => simulateDeleteCourse('user-a', c.id, 2), e => e.code === 'NOT_FOUND');
+  // 9. Delete non-existent course throws NOT_FOUND
+  await assert.rejects(() => simulateDeleteCourse('user-a', c.id, 3), e => e.code === 'NOT_FOUND');
+
+  // 10. Backward compatibility & safe migration path:
+  // Simulate an old course created before the redesign with embedded markers in the course document
+  const oldId = crypto.randomUUID();
+  const legacyMarker = { id: crypto.randomUUID(), name: '레거시 스팟', category: 'spot', address: '', lat: 37.5, lng: 127.0 };
+  const legacyCourseDoc = {
+    id: oldId,
+    version: 1,
+    name: '레거시 코스',
+    region: '',
+    tags: [],
+    speed: 4,
+    points: [{ lat: 37.5, lng: 127.0 }],
+    visits: [],
+    markers: [legacyMarker], // embedded in doc!
+    updated: new Date().toISOString()
+  };
+  store.set(`users/user-b/courses/${oldId}`, legacyCourseDoc);
+
+  // Loading legacy course should load embedded markers
+  const loadedLegacy = await simulateFetchCourse('user-b', oldId);
+  assert.equal(loadedLegacy.markers.length, 1);
+  assert.equal(loadedLegacy.markers[0].name, '레거시 스팟');
+
+  // Saving legacy course should write markers to subcollection without silently deleting legacy data
+  const migrated = await simulateSaveCourse('user-b', loadedLegacy, 1);
+  assert.equal(migrated.version, 2);
+  assert.ok(store.has(`users/user-b/courses/${oldId}/markers/${legacyMarker.id}`), 'Migrated marker in subcollection');
+  const storedDoc = store.get(`users/user-b/courses/${oldId}`);
+  assert.ok(Array.isArray(storedDoc.markers), 'Legacy data in course document is not silently deleted');
 });
 
 test('Functions normalizePlace handles Naver API HUB formats and sanitizes data', () => {
@@ -115,15 +230,28 @@ test('Functions normalizePlace handles Naver API HUB formats and sanitizes data'
     source: 'naver-search'
   });
 
-  // Regular coordinates
+  // Regular coordinates with link & category
   const norm2 = normalizePlace({
     title: '경복궁',
     address: '서울 종로구 세종로',
+    category: '여행,명소><b>고궁</b>',
+    link: 'https://place.naver.com/place/12345',
     mapx: '126.9768',
     mapy: '37.5796'
   });
   assert.equal(norm2.lat, 37.5796);
   assert.equal(norm2.lng, 126.9768);
+  assert.equal(norm2.category, '여행,명소>고궁');
+  assert.equal(norm2.link, 'https://place.naver.com/place/12345');
+
+  // Insecure or invalid link is dropped
+  const normInsecure = normalizePlace({
+    title: '장소',
+    mapx: '126.9',
+    mapy: '37.5',
+    link: 'javascript:alert(1)'
+  });
+  assert.equal(normInsecure.link, undefined);
 
   // Invalid coordinates rejected
   assert.equal(normalizePlace(null), null);
@@ -149,6 +277,27 @@ test('Firebase scaffolding and security configuration integrity', () => {
   assert.match(rules, /request\.auth\s*!=\s*null\s*&&\s*request\.auth\.uid\s*==\s*userId/);
   assert.match(rules, /request\.resource\.data\.version\s*==\s*1/);
   assert.match(rules, /request\.resource\.data\.version\s*==\s*resource\.data\.version\s*\+\s*1/);
+  assert.match(rules, /request\.resource\.data\.markers is list/);
+  assert.match(rules, /request\.resource\.data\.markers\.size\(\)\s*<=\s*100/);
+
+  // Verify subcollection rules: users/{userId}/courses/{courseId}/markers/{markerId}
+  assert.match(rules, /match\s+\/markers\/\{markerId\}/);
+  assert.match(rules, /function isValidMarker\(m\)/);
+  assert.match(rules, /m\.id\s*==\s*markerId/);
+  assert.match(rules, /m\.lat\s*>=\s*-90\s*&&\s*m\.lat\s*<=\s*90/);
+  assert.match(rules, /m\.lng\s*>=\s*-180\s*&&\s*m\.lng\s*<=\s*180/);
+  assert.match(rules, /'cafe',\s*'food',\s*'photo',\s*'seminar',\s*'spot'/);
+  assert.match(rules, /m\.naverLink\.matches\('\^https:\/\/\.\+'\)/);
+  assert.match(rules, /m\.keys\(\)\.hasAll\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng'\]\)/);
+  assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink'\]\)/);
+  assert.match(rules, /allow create,\s*update:\s*if request\.auth != null\s*&&\s*request\.auth\.uid == userId\s*&&\s*isValidMarker\(request\.resource\.data\)/);
+  assert.match(rules, /allow delete:\s*if request\.auth != null\s*&&\s*request\.auth\.uid == userId/);
+
+  // Verify no unused helper in course document block
+  const courseMatchIdx = rules.indexOf('match /users/{userId}/courses/{courseId}');
+  const markerMatchIdx = rules.indexOf('match /markers/{markerId}');
+  const courseBlock = rules.slice(courseMatchIdx, markerMatchIdx);
+  assert.ok(!courseBlock.includes('function isValidMarker'), 'No unused helper pretending to validate an array in the course document');
 
   // public/config.js template must NOT have real secrets
   const configContent = readFileSync('public/config.js', 'utf8');
@@ -178,4 +327,144 @@ test('Pages build is deterministic and outputs only static assets with custom CN
   assert.ok(!existsSync('dist/server.mjs'));
   assert.ok(!existsSync('dist/.env'));
   assert.ok(!existsSync('dist/package.json'));
+});
+
+test('Firebase Auth persistence, startup loading UI, and state transition logic', async () => {
+  // 1. Verify public/firebase.mjs imports setPersistence and browserLocalPersistence
+  const fbSource = readFileSync('public/firebase.mjs', 'utf8');
+  assert.match(fbSource, /import\s*\{[^}]*\bsetPersistence\b[^}]*\}\s*from\s*'https:\/\/www\.gstatic\.com\/firebasejs\/11\.4\.0\/firebase-auth\.js'/);
+  assert.match(fbSource, /import\s*\{[^}]*\bbrowserLocalPersistence\b[^}]*\}\s*from\s*'https:\/\/www\.gstatic\.com\/firebasejs\/11\.4\.0\/firebase-auth\.js'/);
+
+  // In loginWithUsername, setPersistence called before signInWithEmailAndPassword
+  const usernameLoginMatch = fbSource.match(/export\s+async\s+function\s+loginWithUsername[\s\S]*?(?=\nexport|\n$|$)/);
+  assert.ok(usernameLoginMatch, 'loginWithUsername function found');
+  assert.match(usernameLoginMatch[0], /await\s+setPersistence\s*\(\s*auth\s*,\s*browserLocalPersistence\s*\)/);
+  const uPersistIdx = usernameLoginMatch[0].indexOf('setPersistence');
+  const uSignInIdx = usernameLoginMatch[0].indexOf('signInWithEmailAndPassword');
+  assert.ok(uPersistIdx !== -1 && uSignInIdx > uPersistIdx, 'setPersistence must be awaited before signInWithEmailAndPassword');
+
+  // In loginWithGoogle, setPersistence called before signInWithPopup
+  const googleLoginMatch = fbSource.match(/export\s+async\s+function\s+loginWithGoogle[\s\S]*?(?=\nexport|\n$|$)/);
+  assert.ok(googleLoginMatch, 'loginWithGoogle function found');
+  assert.match(googleLoginMatch[0], /await\s+setPersistence\s*\(\s*auth\s*,\s*browserLocalPersistence\s*\)/);
+  const gPersistIdx = googleLoginMatch[0].indexOf('setPersistence');
+  const gSignInIdx = googleLoginMatch[0].indexOf('signInWithPopup');
+  assert.ok(gPersistIdx !== -1 && gSignInIdx > gPersistIdx, 'setPersistence must be awaited before signInWithPopup');
+
+  // In watchAuthState, error callback falls back gracefully
+  assert.match(fbSource, /onAuthStateChanged\s*\([^,]+,\s*(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>\s*\{[\s\S]*?\},\s*(?:\([^)]*\)|[a-zA-Z0-9_$]+)\s*=>\s*\{[\s\S]*?callback\s*\(\s*null\s*\)/);
+
+  // 2. Verify public/index.html markup and initial states
+  const html = readFileSync('public/index.html', 'utf8');
+  assert.match(html, /<div\s+id="auth-loading"\s+class="auth-loading"\s+role="status"\s+aria-live="polite">/);
+  assert.match(html, /<div\s+class="auth-loading-spinner"\s+aria-hidden="true"><\/div>/);
+  assert.match(html, /<section\s+id="login-screen"\s+class="login-screen"\s+hidden>/);
+  const loadingPos = html.indexOf('id="auth-loading"');
+  const loginPos = html.indexOf('id="login-screen"');
+  assert.ok(loadingPos !== -1 && loginPos > loadingPos, '#auth-loading must precede #login-screen in the DOM');
+
+  // Verify public/style.css loading spinner rules
+  const css = readFileSync('public/style.css', 'utf8');
+  assert.match(css, /\.auth-loading\b/);
+  assert.match(css, /\.auth-loading-spinner\b/);
+  assert.match(css, /@keyframes\s+auth-spin/);
+
+  // 3. Test startup state machine and session transitions (mirrors public/app.mjs logic)
+  function createAuthAppSimulator() {
+    let currentUser = null;
+    let courseResetCount = 0;
+    const elements = {
+      'auth-loading': { hidden: false },
+      'login-screen': { hidden: true },
+      'app': { hidden: true },
+      'login-error': { textContent: 'previous error' }
+    };
+
+    async function signedIn(u) {
+      const loading = elements['auth-loading'];
+      if (loading) loading.hidden = true;
+      const sameUser = Boolean(currentUser && currentUser.id === u.id);
+      currentUser = u;
+      elements['login-screen'].hidden = true;
+      elements['app'].hidden = false;
+      elements['login-error'].textContent = '';
+      if (!sameUser) {
+        courseResetCount++;
+      }
+    }
+
+    async function handleAuthState(activeUser) {
+      const loading = elements['auth-loading'];
+      if (loading) loading.hidden = true;
+      if (activeUser) {
+        await signedIn(activeUser);
+      } else {
+        currentUser = null;
+        elements['login-screen'].hidden = false;
+        elements['app'].hidden = true;
+        elements['login-error'].textContent = '';
+      }
+    }
+
+    async function handleLogout() {
+      currentUser = null;
+      courseResetCount++;
+      const loading = elements['auth-loading'];
+      if (loading) loading.hidden = true;
+      elements['app'].hidden = true;
+      elements['login-screen'].hidden = false;
+    }
+
+    return { elements, getCurrentUser: () => currentUser, getCourseResetCount: () => courseResetCount, signedIn, handleAuthState, handleLogout };
+  }
+
+  // Case A: Startup with existing authenticated user restored from persistence
+  const simAuth = createAuthAppSimulator();
+  assert.equal(simAuth.elements['auth-loading'].hidden, false, 'starts with loading visible');
+  assert.equal(simAuth.elements['login-screen'].hidden, true, 'starts with login-screen hidden to prevent flicker');
+  assert.equal(simAuth.elements['app'].hidden, true, 'starts with app hidden');
+
+  await simAuth.handleAuthState({ id: 'user-restore-1', name: 'restored-user' });
+  assert.equal(simAuth.elements['auth-loading'].hidden, true, 'auth-loading hidden after session restored');
+  assert.equal(simAuth.elements['login-screen'].hidden, true, 'login-screen remains hidden');
+  assert.equal(simAuth.elements['app'].hidden, false, 'app screen is revealed');
+  assert.equal(simAuth.getCurrentUser()?.id, 'user-restore-1');
+  assert.equal(simAuth.getCourseResetCount(), 1, 'course initialized once for new user');
+
+  // Redundant auth state event with same user should not reset course state
+  await simAuth.handleAuthState({ id: 'user-restore-1', name: 'restored-user' });
+  assert.equal(simAuth.getCourseResetCount(), 1, 'course state preserved when auth state triggers with same user');
+  assert.equal(simAuth.elements['app'].hidden, false);
+
+  // Case B: Startup with unauthenticated user
+  const simUnauth = createAuthAppSimulator();
+  assert.equal(simUnauth.elements['auth-loading'].hidden, false);
+  assert.equal(simUnauth.elements['login-screen'].hidden, true);
+
+  await simUnauth.handleAuthState(null);
+  assert.equal(simUnauth.elements['auth-loading'].hidden, true, 'auth-loading hidden when unauthenticated');
+  assert.equal(simUnauth.elements['login-screen'].hidden, false, 'login-screen is shown');
+  assert.equal(simUnauth.elements['app'].hidden, true, 'app screen remains hidden');
+  assert.equal(simUnauth.elements['login-error'].textContent, '');
+  assert.equal(simUnauth.getCurrentUser(), null);
+
+  // Explicit sign in from login screen
+  await simUnauth.signedIn({ id: 'user-login-2', name: 'bob' });
+  assert.equal(simUnauth.elements['auth-loading'].hidden, true);
+  assert.equal(simUnauth.elements['login-screen'].hidden, true);
+  assert.equal(simUnauth.elements['app'].hidden, false);
+  assert.equal(simUnauth.getCurrentUser()?.id, 'user-login-2');
+  assert.equal(simUnauth.getCourseResetCount(), 1);
+
+  // Case C: Logout clears session and restores login screen
+  await simUnauth.handleLogout();
+  assert.equal(simUnauth.elements['auth-loading'].hidden, true);
+  assert.equal(simUnauth.elements['app'].hidden, true);
+  assert.equal(simUnauth.elements['login-screen'].hidden, false);
+  assert.equal(simUnauth.getCurrentUser(), null);
+
+  // Auth observer fires null after logout
+  await simUnauth.handleAuthState(null);
+  assert.equal(simUnauth.elements['login-screen'].hidden, false);
+  assert.equal(simUnauth.elements['app'].hidden, true);
 });

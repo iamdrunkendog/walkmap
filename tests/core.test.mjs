@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {emptyCourse,History,distance,timings,duplicate,validateCourse,courseSignature} from '../public/model.mjs';
+import {emptyCourse,History,distance,timings,duplicate,validateCourse,validateMarker,courseSignature} from '../public/model.mjs';
 import {createApp,openDatabase,addUser,normalizePlace,searchPlaces} from '../server.mjs';
 
 test('route edit / insert / move / delete / undo / redo restores exact points and distances',()=>{
@@ -65,4 +65,91 @@ test('save signature ignores property order, server revision and metadata, but c
  const c=emptyCourse();c.visits=[{name:'직접 작성',id:crypto.randomUUID(),source:'user',lat:37,lng:127,memo:'원문',link:'',stay:15}];
  assert.equal(courseSignature(c),courseSignature({...validateCourse(c),version:2,updated:'now'}));
  assert.notEqual(courseSignature(c),courseSignature({...c,visits:[{...c.visits[0],memo:'수정'}]}));
+ assert.notEqual(courseSignature(c),courseSignature({...c,markers:[{id:crypto.randomUUID(),name:'카페',category:'cafe',address:'',lat:37,lng:127}]}));
+});
+
+test('course reference markers: validation, backward compatibility migration, allowlist & duplicate independence',()=>{
+ const mId=crypto.randomUUID();
+ const m={id:mId,name:'느티나무 카페',category:'cafe',address:'서울 종로구 삼청로 10',lat:37.58,lng:126.98,naverLink:'https://place.naver.com/12345'};
+ const c={...emptyCourse(),markers:[m]};
+ const validated=validateCourse(c);
+ assert.deepEqual(validated.markers,[m]);
+ assert.deepEqual(validateMarker(m),m);
+ assert.throws(()=>validateMarker(null));
+ assert.throws(()=>validateMarker({...m,name:''}));
+ assert.throws(()=>validateMarker({...m,category:'unknown'}));
+ assert.throws(()=>validateMarker({...m,lat:95}));
+ assert.throws(()=>validateMarker({...m,lng:-185}));
+ assert.throws(()=>validateMarker({...m,naverLink:'http://insecure.test'}));
+
+ // Migration: old course without markers defaults to empty array
+ const oldCourse={id:crypto.randomUUID(),version:0,name:'옛날 코스',region:'',tags:[],speed:4,points:[],visits:[]};
+ delete oldCourse.markers;
+ const migrated=validateCourse(oldCourse);
+ assert.deepEqual(migrated.markers,[]);
+
+ // Allowlist: raw API / unexpected fields stripped
+ const withRaw={...m,rawResponse:{foo:'bar'},description:'불필요',extraField:999};
+ const cleaned=validateCourse({...emptyCourse(),markers:[withRaw]});
+ assert.deepEqual(cleaned.markers,[m]);
+ assert.equal(cleaned.markers[0].rawResponse,undefined);
+ assert.equal(cleaned.markers[0].description,undefined);
+
+ // Duplicate independence
+ const dup=duplicate(validated);
+ assert.equal(dup.markers.length,1);
+ assert.notEqual(dup.markers[0].id,mId);
+ assert.equal(dup.markers[0].name,m.name);
+ dup.markers[0].name='수정된 마커';
+ assert.equal(validated.markers[0].name,'느티나무 카페');
+
+ // Validation limits & rejections
+ assert.throws(()=>validateCourse({...c,markers:[null]}));
+ assert.throws(()=>validateCourse({...c,markers:[['nested']]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,name:''}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,name:'   '}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,lat:91}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,lng:181}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,lat:NaN}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,category:'hospital'}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,category:123}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,address:'a'.repeat(201)}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,address:123}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,naverLink:123}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,naverLink:'javascript:alert(1)'}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,naverLink:'http://insecure.test'}]}));
+ assert.throws(()=>validateCourse({...c,markers:[{...m,naverLink:'https://user:pass@evil.com'}]}));
+ assert.throws(()=>validateCourse({...c,markers:[m,{...m}]})); // duplicate marker ID
+ assert.throws(()=>validateCourse({...c,markers:Array.from({length:101},()=>({...m,id:crypto.randomUUID()}))})); // > 100
+ for(const cat of ['cafe','food','photo','seminar','spot']){
+  assert.equal(validateCourse({...c,markers:[{...m,category:cat}]}).markers[0].category,cat);
+ }
+});
+
+test('normalizePlace extracts safe https link and sanitized category',()=>{
+ const p=normalizePlace({
+  title:'<b>북촌</b> 카페',
+  roadAddress:'서울 종로구 북촌로',
+  category:'음식점><b>카페</b>,디저트',
+  link:'https://place.naver.com/restaurant/12345',
+  mapx:'1269820000',
+  mapy:'375810000'
+ });
+ assert.deepEqual(p,{
+  title:'북촌 카페',
+  address:'서울 종로구 북촌로',
+  category:'음식점>카페,디저트',
+  link:'https://place.naver.com/restaurant/12345',
+  lat:37.581,
+  lng:126.982,
+  source:'naver-search'
+ });
+
+ const badLink=normalizePlace({
+  title:'장소',
+  mapx:'1269820000',
+  mapy:'375810000',
+  link:'javascript:alert(1)'
+ });
+ assert.equal(badLink.link,undefined);
 });

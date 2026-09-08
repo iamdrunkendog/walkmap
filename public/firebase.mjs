@@ -1,6 +1,8 @@
 import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.4.0/firebase-app.js';
 import {
   getAuth,
+  setPersistence,
+  browserLocalPersistence,
   signInWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
@@ -14,6 +16,9 @@ import {
   collection,
   getDoc,
   getDocs,
+  setDoc,
+  deleteDoc,
+  writeBatch,
   query,
   orderBy,
   runTransaction,
@@ -25,7 +30,7 @@ import {
   connectFunctionsEmulator
 } from 'https://www.gstatic.com/firebasejs/11.4.0/firebase-functions.js';
 import { config } from './config.js';
-import { usernameToEmail, emailToUsername, validateCourse } from './model.mjs';
+import { usernameToEmail, emailToUsername, validateCourse, validateMarker } from './model.mjs';
 
 let app = null, auth = null, db = null, functions = null;
 
@@ -72,6 +77,9 @@ export function watchAuthState(callback) {
       id: user.uid,
       name: user.displayName || emailToUsername(user.email) || 'user'
     });
+  }, (err) => {
+    console.warn('onAuthStateChanged error:', err);
+    callback(null);
   });
 }
 
@@ -85,6 +93,7 @@ export async function loginWithUsername(username, password) {
   }
   const { auth } = initFirebase();
   try {
+    await setPersistence(auth, browserLocalPersistence);
     const cred = await signInWithEmailAndPassword(auth, email, password);
     return {
       id: cred.user.uid,
@@ -108,6 +117,7 @@ export async function loginWithGoogle() {
   if (!isConfigured()) throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
   const { auth } = initFirebase();
   try {
+    await setPersistence(auth, browserLocalPersistence);
     const cred = await signInWithPopup(auth, new GoogleAuthProvider());
     return { id: cred.user.uid, name: cred.user.displayName || emailToUsername(cred.user.email) || 'user' };
   } catch (err) {
@@ -136,7 +146,20 @@ export async function fetchCourses(uid) {
   } catch {
     snapshot = await getDocs(colRef);
   }
-  const items = snapshot.docs.map(d => d.data());
+  const items = await Promise.all(snapshot.docs.map(async (d) => {
+    const course = d.data();
+    try {
+      const markersSnap = await getDocs(collection(db, 'users', uid, 'courses', course.id, 'markers'));
+      if (!markersSnap.empty) {
+        course.markers = markersSnap.docs.map(mDoc => mDoc.data());
+      } else if (!Array.isArray(course.markers)) {
+        course.markers = [];
+      }
+    } catch {
+      if (!Array.isArray(course.markers)) course.markers = [];
+    }
+    return course;
+  }));
   items.sort((a, b) => (b.updated || '').localeCompare(a.updated || ''));
   return items;
 }
@@ -151,7 +174,26 @@ export async function fetchCourse(uid, courseId) {
   if (!snap.exists()) {
     throw Object.assign(new Error('코스를 찾을 수 없습니다.'), { code: 'NOT_FOUND' });
   }
-  return snap.data();
+  const courseData = snap.data();
+
+  // Load markers from subcollection: users/{uid}/courses/{courseId}/markers
+  try {
+    const markersRef = collection(db, 'users', uid, 'courses', courseId, 'markers');
+    const markersSnap = await getDocs(markersRef);
+    if (!markersSnap.empty) {
+      courseData.markers = markersSnap.docs.map(d => d.data());
+    } else if (Array.isArray(courseData.markers)) {
+      // Preserve backward compatibility: load legacy embedded course.markers
+    } else {
+      courseData.markers = [];
+    }
+  } catch {
+    if (!Array.isArray(courseData.markers)) {
+      courseData.markers = [];
+    }
+  }
+
+  return courseData;
 }
 
 export async function saveCourse(uid, rawCourse, baseVersion) {
@@ -168,7 +210,25 @@ export async function saveCourse(uid, rawCourse, baseVersion) {
   const docRef = doc(db, 'users', uid, 'courses', c.id);
   const nextVersion = baseVersion + 1;
   const updated = new Date().toISOString();
-  const nextData = { ...c, version: nextVersion, updated };
+
+  // Prepare course document data without embedding markers array on new writes
+  const { markers, ...courseDocData } = c;
+  const nextData = { ...courseDocData, version: nextVersion, updated };
+
+  // For updates, query existing subcollection marker documents for deletion diffing
+  const markersColRef = collection(db, 'users', uid, 'courses', c.id, 'markers');
+  let existingMarkerIds = new Set();
+  if (baseVersion > 0) {
+    try {
+      const existingSnap = await getDocs(markersColRef);
+      existingMarkerIds = new Set(existingSnap.docs.map(d => d.id));
+    } catch (err) {
+      console.warn('Could not read existing markers for diffing:', err);
+    }
+  }
+
+  const currentMarkerIds = new Set((markers || []).map(m => m.id));
+  const markerIdsToDelete = [...existingMarkerIds].filter(id => !currentMarkerIds.has(id));
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(docRef);
@@ -185,11 +245,24 @@ export async function saveCourse(uid, rawCourse, baseVersion) {
       if (current.version !== baseVersion) {
         throw Object.assign(new Error('다른 창에서 수정되었습니다. 현재 내용은 유지됩니다. 복제하여 별도로 저장해 주세요.'), { code: 'CONFLICT' });
       }
+      // tx.update only updates fields in nextData, preserving legacy course.markers on the doc if present
       tx.update(docRef, nextData);
+    }
+
+    // Atomically delete removed marker documents from the subcollection
+    for (const id of markerIdsToDelete) {
+      const mDocRef = doc(db, 'users', uid, 'courses', c.id, 'markers', id);
+      tx.delete(mDocRef);
+    }
+
+    // Atomically write all current marker documents to the subcollection
+    for (const m of (markers || [])) {
+      const mDocRef = doc(db, 'users', uid, 'courses', c.id, 'markers', m.id);
+      tx.set(mDocRef, m);
     }
   });
 
-  return nextData;
+  return { ...c, version: nextVersion, updated };
 }
 
 export async function deleteCourse(uid, courseId, expectedVersion) {
@@ -198,6 +271,16 @@ export async function deleteCourse(uid, courseId, expectedVersion) {
   }
   const { db } = initFirebase();
   const docRef = doc(db, 'users', uid, 'courses', courseId);
+  const markersColRef = collection(db, 'users', uid, 'courses', courseId, 'markers');
+
+  // Query existing subcollection markers so they are deleted atomically with course doc
+  let markerDocs = [];
+  try {
+    const markersSnap = await getDocs(markersColRef);
+    markerDocs = markersSnap.docs;
+  } catch (err) {
+    console.warn('Could not query markers for deletion:', err);
+  }
 
   await runTransaction(db, async (tx) => {
     const snap = await tx.get(docRef);
@@ -208,9 +291,44 @@ export async function deleteCourse(uid, courseId, expectedVersion) {
     if (current.version !== expectedVersion) {
       throw Object.assign(new Error('다른 창에서 수정된 코스입니다. 다시 불러온 뒤 삭제해 주세요.'), { code: 'CONFLICT' });
     }
+    // Delete all marker subcollection documents atomically
+    for (const mDoc of markerDocs) {
+      tx.delete(mDoc.ref);
+    }
     tx.delete(docRef);
   });
 
+  return { ok: true };
+}
+
+export async function fetchMarkers(uid, courseId) {
+  if (!isConfigured()) {
+    throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
+  }
+  const { db } = initFirebase();
+  const colRef = collection(db, 'users', uid, 'courses', courseId, 'markers');
+  const snap = await getDocs(colRef);
+  return snap.docs.map(d => d.data());
+}
+
+export async function saveMarker(uid, courseId, rawMarker) {
+  if (!isConfigured()) {
+    throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
+  }
+  const valid = validateMarker(rawMarker);
+  const { db } = initFirebase();
+  const markerRef = doc(db, 'users', uid, 'courses', courseId, 'markers', valid.id);
+  await setDoc(markerRef, valid);
+  return valid;
+}
+
+export async function deleteMarker(uid, courseId, markerId) {
+  if (!isConfigured()) {
+    throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
+  }
+  const { db } = initFirebase();
+  const markerRef = doc(db, 'users', uid, 'courses', courseId, 'markers', markerId);
+  await deleteDoc(markerRef);
   return { ok: true };
 }
 

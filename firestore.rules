@@ -27,7 +27,8 @@ service cloud.firestore {
         && request.resource.data.visits is list
         && request.resource.data.visits.size() <= 100
         && request.resource.data.tags is list
-        && request.resource.data.tags.size() <= 20;
+        && request.resource.data.tags.size() <= 20
+        && (!('markers' in request.resource.data) || (request.resource.data.markers is list && request.resource.data.markers.size() <= 100));
 
       // Only owner can update, must strictly increment version by 1
       allow update: if request.auth != null
@@ -45,10 +46,49 @@ service cloud.firestore {
         && request.resource.data.visits is list
         && request.resource.data.visits.size() <= 100
         && request.resource.data.tags is list
-        && request.resource.data.tags.size() <= 20;
+        && request.resource.data.tags.size() <= 20
+        && (!('markers' in request.resource.data) || (request.resource.data.markers is list && request.resource.data.markers.size() <= 100));
 
       // Only owner can delete
       allow delete: if request.auth != null && request.auth.uid == userId;
+
+      // Subcollection: users/{userId}/courses/{courseId}/markers/{markerId}
+      // Each marker document is validated at document level
+      match /markers/{markerId} {
+        function isValidMarker(m) {
+          return m is map
+            && m.id is string
+            && m.id == markerId
+            && m.id.size() > 0
+            && m.id.size() <= 36
+            && m.name is string
+            && m.name.size() > 0
+            && m.name.size() <= 100
+            && m.category is string
+            && m.category in ['cafe', 'food', 'photo', 'seminar', 'spot']
+            && m.lat is number
+            && m.lat >= -90
+            && m.lat <= 90
+            && m.lng is number
+            && m.lng >= -180
+            && m.lng <= 180
+            && (!('address' in m) || (m.address is string && m.address.size() <= 200))
+            && (!('naverLink' in m) || (m.naverLink is string && m.naverLink.size() <= 2000 && m.naverLink.matches('^https://.+')))
+            && m.keys().hasAll(['id', 'name', 'category', 'lat', 'lng'])
+            && m.keys().hasOnly(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink']);
+        }
+
+        // Only authenticated user matching the path userId can read markers
+        allow read: if request.auth != null && request.auth.uid == userId;
+
+        // Only owner can create or update marker documents with strict schema validation
+        allow create, update: if request.auth != null
+          && request.auth.uid == userId
+          && isValidMarker(request.resource.data);
+
+        // Only owner can delete markers
+        allow delete: if request.auth != null && request.auth.uid == userId;
+      }
     }
   }
 }

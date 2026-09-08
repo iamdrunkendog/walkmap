@@ -15,6 +15,13 @@ Firebase Authentication·Firestore를 백엔드로 사용하고 GitHub Pages를 
 - **데이터베이스 (Firestore)**: Cloud Firestore
   - 코스는 사용자별 경로 `/users/{uid}/courses/{courseId}` 아래에 저장되며, 보안 규칙으로 소유자 격리 및 순차적 버전 증가(`version == resource.data.version + 1`)를 강제합니다.
   - 트랜잭션을 통해 다른 창에서의 동시 수정을 감지하고 무단 덮어쓰기를 차단합니다.
+- **참고 마커 (Reference Markers)**:
+  - 방문 순서나 체류시간이 없는 독립 참조 마커(식당, 카페, 포토스팟, 세미나실 등)를 지원합니다.
+  - 코스 문서 내 배열 임베딩 대신, 독립된 Firestore 서브컬렉션 `/users/{uid}/courses/{courseId}/markers/{markerId}` 문서로 저장됩니다 (기존 방문 장소 및 경로는 코스 문서에 유지).
+  - Firestore 보안 규칙이 문서 수준에서 strict 스키마(경로 일치 ID, 이름 길이, 카테고리 허용목록 `['cafe', 'food', 'photo', 'seminar', 'spot']`, 좌표 범위, 선택적 주소 및 HTTPS 링크, 키 제한)를 직접 검증합니다.
+  - 트랜잭션을 통한 원자적 저장을 적용하여 코스 버전과 마커 변경(추가/수정/삭제)이 부분 저장 없이 일괄 반영되며 동시성 충돌을 보호합니다.
+  - 하위 호환성: 기존 코스 문서에 저장된 레거시 `course.markers` 배열을 안전하게 불러오며, 저장 시 서브컬렉션으로 안전하게 마이그레이션하고 레거시 데이터를 무단 삭제하지 않습니다.
+  - 장소 검색 결과에서 “마커로 저장”하거나 지도에서 직접 추가할 수 있으며, 카테고리별 구분 아이콘(CSS/HTML)을 제공합니다.
 - **장소 검색**: 무료 플랜 유지로 현재 비활성화되어 있습니다. 네이버 검색은 브라우저에 비밀키를 노출할 수 없으므로, 검색 기능을 다시 켜려면 Blaze 플랜과 Cloud Functions Secret Manager가 필요합니다.
 - **레거시 런타임 (SQLite / Node server)**:
   - 기존 `server.mjs`, `manage.mjs` 및 `tests/core.test.mjs`는 테스트 및 로컬 참조용으로 격리 유지되며, GitHub Pages 빌드 아티팩트에는 포함되지 않습니다.
