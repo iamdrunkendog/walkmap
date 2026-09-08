@@ -50,6 +50,7 @@ export async function searchPlaces(query,fetcher=fetch) {
 }
 export function createApp({db=openDatabase(), origin=process.env.APP_ORIGIN||'http://localhost:3000',fetcher=fetch}={}) {
   const production=process.env.NODE_ENV==='production';
+  const noAuth=process.env.WALKMAP_NO_AUTH==='true';
   if(production&&!origin.startsWith('https://'))throw new Error('운영 APP_ORIGIN은 HTTPS여야 합니다.');
   const limits=new Map(); // ponytail: single process limits; shared limiter needed only for multiple instances.
   const rate=(key,max,window=60000)=>{
@@ -94,12 +95,15 @@ export function createApp({db=openDatabase(), origin=process.env.APP_ORIGIN||'ht
         send(200,{id:user.id,name:user.name});return;
       }
       const token=req.headers.cookie?.match(/(?:^|;\s*)walkmap_session=([a-f0-9]{64})(?:;|$)/)?.[1]||'';
-      const user=db.prepare('SELECT users.id,users.name FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?').get(hashToken(token),Date.now());
+      const user=noAuth
+        ? db.prepare('SELECT id,name FROM users ORDER BY name LIMIT 1').get()
+        : db.prepare('SELECT users.id,users.name FROM sessions JOIN users ON users.id=sessions.user_id WHERE token=? AND expires>?').get(hashToken(token),Date.now());
       if(!user)throw error(401,'SESSION','로그인이 필요합니다. 작성 중인 내용은 유지됩니다.');
       if(path==='/api/me'&&req.method==='GET'){send(200,user);return;}
       if(path==='/api/config'&&req.method==='GET'){send(200,{mapsClientId:process.env.NAVER_MAPS_CLIENT_ID||''});return;}
       if(path==='/api/logout'&&req.method==='POST'){
-        db.prepare('DELETE FROM sessions WHERE token=?').run(hashToken(token));res.setHeader('Set-Cookie',`walkmap_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${production?'; Secure':''}`);send(200,{ok:true});return;
+        if(!noAuth)db.prepare('DELETE FROM sessions WHERE token=?').run(hashToken(token));
+        res.setHeader('Set-Cookie',`walkmap_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0${production?'; Secure':''}`);send(200,{ok:true});return;
       }
       if(path==='/api/search'&&req.method==='GET'){
         rate(`search:${user.id}`,30);const query=(url.searchParams.get('q')||'').trim();if(!query||query.length>100)throw error(400,'QUERY','검색어는 1–100자로 입력해 주세요.');
