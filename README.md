@@ -1,9 +1,9 @@
 # WalkMap
 
 네이버 지도에 직접 그린 도보 경로와 방문 장소·체류시간을 기록하는 개인/소규모 포토워크 웹 앱입니다.
-Firebase(인증, Firestore, Cloud Functions)를 백엔드로 사용하고 GitHub Pages를 정적 프론트엔드 호스팅으로 사용하도록 전환되었습니다.
+Firebase Authentication·Firestore를 백엔드로 사용하고 GitHub Pages를 정적 프론트엔드 호스팅으로 사용하도록 전환되었습니다. 현재 무료 플랜을 유지하기 위해 Cloud Functions 기반 네이버 장소 검색은 비활성화되어 있으며, 지도에서 위치를 직접 선택합니다.
 
-> **안내**: 전용 Firebase 프로젝트 생성 및 클라우드 배포는 추후 진행됩니다. 현재 저장소에는 실제 프로젝트 ID나 비밀값이 포함되어 있지 않으며, 빌드/배포 시점에 주입됩니다.
+> **현재 배포**: Firebase 프로젝트 `walkmap-gaemi-kim`과 GitHub Pages `https://walkmap.gaemi.kim`을 사용합니다. Firebase 웹 설정값은 공개 클라이언트 설정으로 GitHub Actions Variables에서 주입합니다.
 
 ---
 
@@ -15,9 +15,7 @@ Firebase(인증, Firestore, Cloud Functions)를 백엔드로 사용하고 GitHub
 - **데이터베이스 (Firestore)**: Cloud Firestore
   - 코스는 사용자별 경로 `/users/{uid}/courses/{courseId}` 아래에 저장되며, 보안 규칙으로 소유자 격리 및 순차적 버전 증가(`version == resource.data.version + 1`)를 강제합니다.
   - 트랜잭션을 통해 다른 창에서의 동시 수정을 감지하고 무단 덮어쓰기를 차단합니다.
-- **장소 검색 (Cloud Functions)**: Firebase 2nd Gen Callable HTTPS Function (`searchPlaces`)
-  - 네이버 API HUB 지역 검색 비밀키(`NAVER_SEARCH_CLIENT_SECRET`)를 Cloud Secret Manager를 통해 서버 측에만 안전하게 보관합니다.
-  - 로그인한 사용자(`request.auth`)만 검색 함수를 호출할 수 있습니다.
+- **장소 검색**: 무료 플랜 유지로 현재 비활성화되어 있습니다. 네이버 검색은 브라우저에 비밀키를 노출할 수 없으므로, 검색 기능을 다시 켜려면 Blaze 플랜과 Cloud Functions Secret Manager가 필요합니다.
 - **레거시 런타임 (SQLite / Node server)**:
   - 기존 `server.mjs`, `manage.mjs` 및 `tests/core.test.mjs`는 테스트 및 로컬 참조용으로 격리 유지되며, GitHub Pages 빌드 아티팩트에는 포함되지 않습니다.
 
@@ -50,13 +48,13 @@ node tests/secrets-check.mjs
 
 ---
 
-## 3. 추후 필요한 Firebase 콘솔 설정
+## 3. Firebase 콘솔 설정
 
-Firebase 전용 프로젝트가 생성되면 아래 순서로 콘솔에서 설정을 진행합니다.
+Firebase 전용 프로젝트 `walkmap-gaemi-kim`에 아래 설정을 적용합니다.
 
 ### 1) Firebase 프로젝트 생성
-1. [Firebase Console](https://console.firebase.google.com/)에서 새 프로젝트를 만듭니다.
-2. Cloud Functions 외부 API 호출을 위해 요금제를 **Blaze(종량제)**로 전환합니다.
+1. [Firebase Console](https://console.firebase.google.com/project/walkmap-gaemi-kim)에서 프로젝트를 엽니다.
+2. Cloud Firestore를 **Standard**, 위치 `asia-northeast3`로 생성합니다.
 
 ### 2) Authentication 설정
 1. **Build > Authentication > Sign-in method**로 이동합니다.
@@ -67,8 +65,7 @@ Firebase 전용 프로젝트가 생성되면 아래 순서로 콘솔에서 설�
 
 ### 3) Cloud Firestore 설정
 1. **Build > Firestore Database**에서 데이터베이스를 만듭니다 (프로덕션 모드).
-2. 위치는 서울 리전(`asia-northeast3`)을 권장합니다.
-3. 보안 규칙 배포:
+2. 보안 규칙 배포:
    ```sh
    firebase deploy --only firestore:rules
    ```
@@ -89,9 +86,9 @@ Firebase 전용 프로젝트가 생성되면 아래 순서로 콘솔에서 설�
 
 ---
 
-## 4. Cloud Functions 네이버 검색 비밀키 설정
+## 4. 선택 기능: Cloud Functions 네이버 검색
 
-네이버 API HUB 지역 검색 비밀키는 Cloud Functions 서버 환경에 비밀값으로 등록합니다.
+이 기능은 Blaze(종량제) 전환을 원할 때만 활성화합니다. 현재는 무료 플랜 유지를 위해 배포하지 않습니다.
 
 ```sh
 # Firebase CLI 로그인 및 프로젝트 선택

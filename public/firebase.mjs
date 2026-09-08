@@ -200,6 +200,8 @@ export async function deleteCourse(uid, courseId, expectedVersion) {
 }
 
 export async function searchPlaces(query) {
+  throw Object.assign(new Error('장소 검색은 현재 무료 플랜에서 사용할 수 없습니다. 지도에서 위치를 직접 선택해 주세요.'), { code: 'SEARCH_UNAVAILABLE' });
+  /* Blaze 플랜을 선택할 때만 Cloud Functions 검색을 활성화합니다.
   if (!isConfigured()) {
     throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
   }
@@ -227,4 +229,5 @@ export async function searchPlaces(query) {
     }
     throw Object.assign(new Error(err.message || '검색 중 오류가 발생했습니다.'), { code: 'SEARCH_ERROR' });
   }
+  */
 }
