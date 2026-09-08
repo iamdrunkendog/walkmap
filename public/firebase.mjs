@@ -2,6 +2,8 @@ import { initializeApp, getApps } from 'https://www.gstatic.com/firebasejs/11.4.
 import {
   getAuth,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut as fbSignOut,
   onAuthStateChanged,
   connectAuthEmulator
@@ -99,6 +101,19 @@ export async function loginWithUsername(username, password) {
       throw Object.assign(new Error('인증 서버에 연결할 수 없습니다. 네트워크 연결을 확인해 주세요.'), { code: 'NETWORK' });
     }
     throw Object.assign(new Error(err.message || '로그인에 실패했습니다.'), { code: err.code || 'LOGIN' });
+  }
+}
+
+export async function loginWithGoogle() {
+  if (!isConfigured()) throw Object.assign(new Error('Firebase 설정이 필요합니다. README의 설정을 확인해 주세요.'), { code: 'CONFIG_MISSING' });
+  const { auth } = initFirebase();
+  try {
+    const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+    return { id: cred.user.uid, name: cred.user.displayName || emailToUsername(cred.user.email) || 'user' };
+  } catch (err) {
+    if (err.code === 'auth/popup-closed-by-user') return null;
+    if (err.code === 'auth/popup-blocked') throw Object.assign(new Error('Google 로그인 창이 차단되었습니다. 팝업을 허용해 주세요.'), { code: 'POPUP_BLOCKED' });
+    throw Object.assign(new Error(err.message || 'Google 로그인에 실패했습니다.'), { code: err.code || 'GOOGLE_LOGIN' });
   }
 }
 

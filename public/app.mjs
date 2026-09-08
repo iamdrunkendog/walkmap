@@ -2,6 +2,7 @@ import {emptyCourse,History,clone,timings,duplicate,validateCourse,courseSignatu
 import {
   watchAuthState,
   loginWithUsername,
+  loginWithGoogle,
   logoutUser,
   fetchCourses,
   fetchCourse,
@@ -205,6 +206,12 @@ $('login-form').onsubmit=async e=>{
     const signedUser=await loginWithUsername(username,password);
     await signedIn(signedUser);
   }catch(e){$('login-error').textContent=e.message;}finally{b.disabled=false;}
+};
+$('google-login').onclick=async()=>{
+  const b=$('google-login');b.disabled=true;$('login-error').textContent='';
+  try{const signedUser=await loginWithGoogle();if(signedUser)await signedIn(signedUser);}
+  catch(e){$('login-error').textContent=e.message;}
+  finally{b.disabled=false;}
 };
 $('logout').onclick=async()=>{
   if(!canLeave())return;

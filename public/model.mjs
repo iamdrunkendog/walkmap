@@ -57,6 +57,7 @@ export function courseSignature(course) {
 
 export function usernameToEmail(username, domain = 'walkmap.internal') {
   const clean = String(username || '').trim().toLowerCase();
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(clean)) return clean;
   if (!/^[a-z0-9_-]{3,40}$/.test(clean)) {
     throw new Error('아이디는 3–40자의 영문, 숫자, 밑줄, 하이픈만 사용할 수 있습니다.');
   }

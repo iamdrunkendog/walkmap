@@ -19,7 +19,7 @@ test('deterministic internal email mapping preserves username and account semant
   // Validation boundaries: 3–40 characters, letters, digits, underscore, hyphen
   assert.throws(() => usernameToEmail('ab'), /아이디는 3–40자/);
   assert.throws(() => usernameToEmail('a'.repeat(41)), /아이디는 3–40자/);
-  assert.throws(() => usernameToEmail('alice@example.com'), /아이디는 3–40자/);
+  assert.equal(usernameToEmail('alice@example.com'), 'alice@example.com');
   assert.throws(() => usernameToEmail('alice with space'), /아이디는 3–40자/);
   assert.throws(() => usernameToEmail('한글아이디'), /아이디는 3–40자/);
 });
