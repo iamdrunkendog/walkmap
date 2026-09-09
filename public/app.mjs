@@ -265,6 +265,12 @@ function renderMode(){
     $('route-edit-btn').textContent=isRouteEditing?'✓ 편집 완료':'⌁ 경로 편집 시작';
     $('route-mode-desc').textContent=isRouteEditing?'지도 클릭: 점 추가 · 점 끌기: 이동 · ＋: 중간 삽입':'편집 모드에서 점 끌기 및 ＋ 중간 삽입이 가능합니다.';
   }
+  if($('toggle-summary')){
+    const summaryVisible=course.points.length>0&&(course.showSummary!==false);
+    $('toggle-summary').classList.toggle('active',summaryVisible);
+    $('toggle-summary').setAttribute('aria-pressed',String(summaryVisible));
+    $('toggle-summary').title=summaryVisible?'경로 요약 창 닫기':'경로 요약 창 열기';
+  }
   for(const id of ['course-name','region','tags','speed','duplicate','visit-add','marker-add'])$(id).disabled=Boolean(drawing);
   if(map)map.setOptions({disableDoubleClickZoom:isRouteEditing,draggable:mode!=='draw'});status();
 }
@@ -304,7 +310,7 @@ function renderMap(){
     const content=endpoint
       ?`<div class="endpoint-marker ${i?'end':''} ${isRouteEditing?'draggable':''}" title="${i?'도착점':'출발점'}${isRouteEditing?' (끌어서 이동)':''}"><strong>${i?'도착':'출발'}</strong></div>`
       :`<div class="route-marker ${selected===i?'selected':''} ${isRouteEditing?'draggable':''}" title="편집점 ${i+1}${isRouteEditing?' (끌어서 이동)':''}"></div>`;
-    const marker=new N.Marker({map,position:pos(p),draggable:isRouteEditing,zIndex:100,icon:{content,anchor:new N.Point(endpoint ? 25 : 8, endpoint ? 15 : 8)}});
+    const marker=new N.Marker({map,position:pos(p),draggable:isRouteEditing,zIndex:endpoint?120:100,icon:{content,anchor:new N.Point(endpoint ? 25 : 8, endpoint ? 15 : 8)}});
     overlays.push(marker);
     N.Event.addListener(marker,'click',()=>{
       if(pickVisitPosition(p)||pickMarkerPosition(p))return;
@@ -408,42 +414,58 @@ function renderMap(){
     });
   });
 
-  // Feature 4: Movable Arrival Summary Window on destination point
-  if(course.points.length>=1){
+  // Feature 4: Movable Route Summary Window on destination point (can be closed and reopened)
+  if(course.points.length>=1 && course.showSummary !== false){
     const dest=course.points[course.points.length-1];
     const t=timings(course);
     const destDetached=course.summaryLabelOffsetX!==undefined||course.summaryLabelOffsetY!==undefined;
     const slx=course.summaryLabelOffsetX!==undefined?course.summaryLabelOffsetX:40;
     const sly=course.summaryLabelOffsetY!==undefined?course.summaryLabelOffsetY:-75;
 
-    const summaryContent=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><svg class="pin-leader dest-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;z-index:5;${destDetached?'':'display:none;'};--leader-color:#E32219;"><line class="leader-halo" x1="0" y1="0" x2="${slx}" y2="${sly}"/><line class="leader-dash" x1="0" y1="0" x2="${slx}" y2="${sly}"/><circle class="leader-halo-c1" cx="0" cy="0" r="4.5"/><circle class="leader-dot-c1" cx="0" cy="0" r="2.8"/><circle class="leader-halo-c2" cx="${slx}" cy="${sly}" r="4"/><circle class="leader-dot-c2" cx="${slx}" cy="${sly}" r="2.4"/></svg><div class="dest-summary-card detachable-label ${destDetached?'detached':''}" style="position:absolute;left:${slx}px;top:${sly}px;" title="도착지 요약 창 (드래그하여 위치 이동)"><div class="dest-summary-header"><span class="dest-badge">🏁 도착 요약</span><span class="dest-drag-handle" title="드래그하여 이동">⋮⋮</span></div><div class="dest-summary-grid"><div class="dest-metric-item"><span class="dest-metric-label">총거리</span><strong class="dest-metric-val">${(t.meters/1000).toFixed(2)}km</strong></div><div class="dest-metric-item"><span class="dest-metric-label">보행시간</span><strong class="dest-metric-val">${Math.ceil(t.walk)}분</strong></div><div class="dest-metric-item"><span class="dest-metric-label">방문체류</span><strong class="dest-metric-val">${Math.ceil(t.stay)}분</strong></div><div class="dest-metric-item total"><span class="dest-metric-label">전체예상</span><strong class="dest-metric-val">${Math.ceil(t.total)}분</strong></div></div></div></div>`;
+    // Leader line SVG is in its own marker at zIndex: 95 so it stays BEHIND the arrival endpoint marker (zIndex: 120)
+    const leaderContent=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><svg class="pin-leader dest-leader" style="position:absolute;left:0;top:0;overflow:visible;pointer-events:none;${destDetached?'':'display:none;'};--leader-color:#E32219;"><line class="leader-halo" x1="0" y1="0" x2="${slx}" y2="${sly}"/><line class="leader-dash" x1="0" y1="0" x2="${slx}" y2="${sly}"/><circle class="leader-halo-c1" cx="0" cy="0" r="4.5"/><circle class="leader-dot-c1" cx="0" cy="0" r="2.8"/><circle class="leader-halo-c2" cx="${slx}" cy="${sly}" r="4"/><circle class="leader-dot-c2" cx="${slx}" cy="${sly}" r="2.4"/></svg></div>`;
+    const summaryLeaderMarker=new N.Marker({map,position:pos(dest),zIndex:95,clickable:false,icon:{content:leaderContent,anchor:new N.Point(0,0)}});
+    overlays.push(summaryLeaderMarker);
 
-    const summaryMarker=new N.Marker({map,position:pos(dest),zIndex:350,icon:{content:summaryContent,anchor:new N.Point(0,0)}});
-    overlays.push(summaryMarker);
+    // Route Summary Card window at zIndex: 350
+    const cardContent=`<div class="marker-wrap" style="position:relative;width:0;height:0;"><div class="dest-summary-card detachable-label ${destDetached?'detached':''}" style="position:absolute;left:${slx}px;top:${sly}px;" title="경로 요약 창 (드래그하여 위치 이동)"><div class="dest-summary-header"><span class="dest-badge">🏁 경로 요약</span><div class="dest-header-actions"><span class="dest-drag-handle" title="드래그하여 이동">⋮⋮</span><button type="button" class="dest-summary-close" aria-label="경로 요약 닫기" title="경로 요약 닫기">✕</button></div></div><div class="dest-summary-grid"><div class="dest-metric-item"><span class="dest-metric-label">총거리</span><strong class="dest-metric-val">${(t.meters/1000).toFixed(2)}km</strong></div><div class="dest-metric-item"><span class="dest-metric-label">보행시간</span><strong class="dest-metric-val">${Math.ceil(t.walk)}분</strong></div><div class="dest-metric-item"><span class="dest-metric-label">방문체류</span><strong class="dest-metric-val">${Math.ceil(t.stay)}분</strong></div><div class="dest-metric-item total"><span class="dest-metric-label">전체예상</span><strong class="dest-metric-val">${Math.ceil(t.total)}분</strong></div></div></div></div>`;
+    const summaryCardMarker=new N.Marker({map,position:pos(dest),zIndex:350,icon:{content:cardContent,anchor:new N.Point(0,0)}});
+    overlays.push(summaryCardMarker);
 
-    const sel=summaryMarker.getElement?summaryMarker.getElement():summaryMarker.el;
-    if(sel){
-      const sCardEl=sel.querySelector('.dest-summary-card');
-      const sLeaderEl=sel.querySelector('.pin-leader');
-      if(sCardEl&&sLeaderEl){
-        setupLabelDrag(sCardEl,sLeaderEl,null,()=>({
-          x:slx,
-          y:sly
-        }),(newX,newY)=>{
-          mutate(c=>{
-            if(newX===undefined){
-              delete c.summaryLabelOffsetX;
-              delete c.summaryLabelOffsetY;
-            }else{
-              c.summaryLabelOffsetX=newX;
-              c.summaryLabelOffsetY=newY;
-            }
-          });
-          toast(newX===undefined?'도착 요약 창 위치를 기본 위치로 복원했습니다.':'도착 요약 창 위치를 이동했습니다.');
-        },()=>{
-          toast('도착 요약: 드래그하여 지도의 원하는 위치로 이동할 수 있습니다.');
+    const sLeaderEl=(summaryLeaderMarker.getElement?summaryLeaderMarker.getElement():summaryLeaderMarker.el)?.querySelector('.dest-leader');
+    const sCardEl=(summaryCardMarker.getElement?summaryCardMarker.getElement():summaryCardMarker.el)?.querySelector('.dest-summary-card');
+
+    if(sCardEl&&sLeaderEl){
+      const closeBtn=sCardEl.querySelector('.dest-summary-close');
+      if(closeBtn){
+        const stopProp=e=>e.stopPropagation();
+        closeBtn.addEventListener('mousedown',stopProp);
+        closeBtn.addEventListener('pointerdown',stopProp);
+        closeBtn.addEventListener('click',e=>{
+          e.stopPropagation();
+          mutate(c=>{c.showSummary=false;});
+          renderMode();
+          toast('경로 요약 창을 닫았습니다. 상단 [🏁 요약] 버튼으로 다시 열 수 있습니다.');
         });
       }
+
+      setupLabelDrag(sCardEl,sLeaderEl,null,()=>({
+        x:slx,
+        y:sly
+      }),(newX,newY)=>{
+        mutate(c=>{
+          if(newX===undefined){
+            delete c.summaryLabelOffsetX;
+            delete c.summaryLabelOffsetY;
+          }else{
+            c.summaryLabelOffsetX=newX;
+            c.summaryLabelOffsetY=newY;
+          }
+        });
+        toast(newX===undefined?'경로 요약 창 위치를 기본 위치로 복원했습니다.':'경로 요약 창 위치를 이동했습니다.');
+      },()=>{
+        toast('경로 요약: 드래그하여 지도의 원하는 위치로 이동할 수 있습니다.');
+      });
     }
   }
 
@@ -598,7 +620,15 @@ $('draw').onclick=()=>{if(pendingDraft)return toast('이전 임시저장을 먼�
 $('finish').onclick=()=>{drawing=null;mode='pan';renderMode();renderMap();persistDraft();$('draw')?.focus();};
 $('cancel').onclick=()=>{if(drawing){course=drawing.course;history.current=clone(course);history.past=drawing.past;history.future=drawing.future;drawing=null;renderAll();persistDraft();}mode='pan';renderMode();renderMap();$('draw')?.focus();};
 $('undo').onclick=()=>{course=history.undo();selected=-1;renderAll();persistDraft();};$('redo').onclick=()=>{course=history.redo();selected=-1;renderAll();persistDraft();};
-$('fit').onclick=fit;$('selection-delete').onclick=()=>removePoint(selected);$('selection-close').onclick=()=>{selected=-1;renderSelection();renderPoints();};
+$('fit').onclick=fit;
+if($('toggle-summary'))$('toggle-summary').onclick=()=>{
+  if(!course.points.length)return toast('경로에 점이 추가된 후 경로 요약을 볼 수 있습니다.');
+  const nextState=course.showSummary===false;
+  mutate(c=>{c.showSummary=nextState;});
+  renderMode();
+  toast(nextState?'경로 요약 창을 열었습니다.':'경로 요약 창을 닫았습니다.');
+};
+$('selection-delete').onclick=()=>removePoint(selected);$('selection-close').onclick=()=>{selected=-1;renderSelection();renderPoints();};
 for(const t of ['visits','markers','route'])$(`tab-${t}`).onclick=()=>selectTab(t);
 for(const [id,key]of [['course-name','name'],['region','region'],['tags','tags']])$(id).addEventListener('input',e=>{const next=clone(course);next[key]=key==='tags'?e.target.value.split(',').map(s=>s.trim()).filter(Boolean):e.target.value;commit(next,false);});
 $('speed').oninput=e=>{const n=Number(e.target.value);if(n>=.5&&n<=10){const next=clone(course);next.speed=n;commit(next,false);}};

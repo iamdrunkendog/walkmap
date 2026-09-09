@@ -1443,6 +1443,8 @@ dialog select {
 }
 
 .endpoint-marker {
+  position: relative;
+  z-index: 10;
   background: var(--gray-950);
   color: var(--white);
   border: 2px solid var(--white);
@@ -1915,10 +1917,43 @@ dialog select {
   gap: 4px;
 }
 
+.dest-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .dest-summary-header .dest-drag-handle {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--gray-400);
   letter-spacing: -1px;
+  cursor: grab;
+  padding: 0 2px;
+  line-height: 1;
+}
+
+.dest-summary-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--gray-200);
+  border-radius: 4px;
+  background: var(--white);
+  color: var(--gray-600);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.12s, color 0.12s, border-color 0.12s;
+}
+
+.dest-summary-close:hover {
+  background: var(--gray-100);
+  color: var(--accent-red);
+  border-color: var(--accent-red);
 }
 
 .dest-summary-grid {

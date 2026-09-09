@@ -260,19 +260,22 @@ test('detachable pin label offsets: validation, bounds enforcement, round-trip a
   assert.equal(dup.markers[0].labelOffsetX, 45);
   assert.equal(dup.markers[0].labelOffsetY, -60);
 
-  // Course summary label offsets & label scale
+  // Course summary label offsets & label scale & showSummary
   const courseWithSummary = validateCourse({
     ...valCourse,
     labelScale: 1.2,
     summaryLabelOffsetX: 50,
-    summaryLabelOffsetY: -80
+    summaryLabelOffsetY: -80,
+    showSummary: false
   });
   assert.equal(courseWithSummary.labelScale, 1.2);
   assert.equal(courseWithSummary.summaryLabelOffsetX, 50);
   assert.equal(courseWithSummary.summaryLabelOffsetY, -80);
+  assert.equal(courseWithSummary.showSummary, false);
   assert.throws(() => validateCourse({ ...valCourse, labelScale: 0.1 }));
   assert.throws(() => validateCourse({ ...valCourse, summaryLabelOffsetX: 1200 }));
   assert.throws(() => validateCourse({ ...valCourse, summaryLabelOffsetY: -1200 }));
+  assert.throws(() => validateCourse({ ...valCourse, showSummary: 'false' }));
 
   // Signature captures label offset changes
   const sigOriginal = courseSignature(valCourse);

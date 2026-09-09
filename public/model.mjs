@@ -135,11 +135,17 @@ export function validateCourse(c) {
   let summaryLabelOffsetX = undefined, summaryLabelOffsetY = undefined;
   if (c.summaryLabelOffsetX !== undefined) summaryLabelOffsetX = Math.round(number(c.summaryLabelOffsetX, -1000, 1000));
   if (c.summaryLabelOffsetY !== undefined) summaryLabelOffsetY = Math.round(number(c.summaryLabelOffsetY, -1000, 1000));
+  let showSummary = undefined;
+  if (c.showSummary !== undefined) {
+    if (typeof c.showSummary !== 'boolean') fail();
+    showSummary = c.showSummary;
+  }
 
   const resCourse = {id:c.id,version:c.version,name:str(c.name,100,true),region:str(c.region,100),tags:c.tags.map(v=>str(v,40,true)),speed:number(c.speed,0.5,10),points:c.points.map(pos),visits,markers};
   if (labelScale !== undefined) resCourse.labelScale = labelScale;
   if (summaryLabelOffsetX !== undefined) resCourse.summaryLabelOffsetX = summaryLabelOffsetX;
   if (summaryLabelOffsetY !== undefined) resCourse.summaryLabelOffsetY = summaryLabelOffsetY;
+  if (showSummary !== undefined) resCourse.showSummary = showSummary;
   return resCourse;
 }
 
