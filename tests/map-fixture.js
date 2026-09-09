@@ -30,5 +30,16 @@ class Marker{
  getElement(){return this.el;}
 }
 class Polyline{constructor(o){this.el=document.createElementNS('http://www.w3.org/2000/svg','svg');this.el.style.cssText='position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';const line=document.createElementNS('http://www.w3.org/2000/svg','polyline');line.setAttribute('points',o.path.map(p=>{const pt=o.map.getProjection().fromCoordToOffset(p);return `${pt.x},${pt.y}`;}).join(' '));line.setAttribute('fill','none');line.setAttribute('stroke',o.strokeColor);line.setAttribute('stroke-width',o.strokeWeight);line.setAttribute('stroke-linejoin','round');this.el.append(line);o.map.el.prepend(this.el);}setMap(m){if(!m)this.el.remove();}}
-window.naver={maps:{Map,Marker,Polyline,LatLng,LatLngBounds,Point,Event,Position:{RIGHT_CENTER:1}}};
+const Service={
+  Status:{OK:200,ERROR:500},
+  geocode(options,callback){
+    const q=options.query||'';
+    if(!q){callback(500,{v2:{addresses:[]}});return;}
+    callback(200,{v2:{addresses:[{roadAddress:q,jibunAddress:q+' 지번',x:'126.978',y:'37.57'}]}});
+  },
+  reverseGeocode(options,callback){
+    callback(200,{v2:{results:[{region:{area1:{name:'서울특별시'},area2:{name:'종로구'},area3:{name:'사직동'}}}]}});
+  }
+};
+window.naver={maps:{Map,Marker,Polyline,LatLng,LatLngBounds,Point,Event,Position:{RIGHT_CENTER:1},Service}};
 })();

@@ -342,8 +342,14 @@ export async function searchPlaces(query) {
   }
   const { functions } = initFirebase();
   const callable = httpsCallable(functions, 'searchPlaces');
+  let timerId;
+  const timeoutPromise = new Promise((_, reject) => {
+    timerId = setTimeout(() => {
+      reject(Object.assign(new Error('검색 서버 응답 시간이 초과되었습니다.'), { code: 'functions/deadline-exceeded' }));
+    }, 6000);
+  });
   try {
-    const result = await callable({ query: clean });
+    const result = await Promise.race([callable({ query: clean }), timeoutPromise]);
     return result.data?.items || [];
   } catch (err) {
     if (err.code === 'functions/unauthenticated') {
@@ -355,9 +361,11 @@ export async function searchPlaces(query) {
     if (err.code === 'functions/permission-denied') {
       throw Object.assign(new Error('검색 인증 실패: API HUB의 지역 API 선택과 인증 정보를 확인해 주세요.'), { code: 'SEARCH_AUTH' });
     }
-    if (err.code === 'functions/unavailable') {
-      throw Object.assign(new Error('검색 서버에 연결할 수 없습니다. 잠시 후 다시 시도해 주세요.'), { code: 'SEARCH_NETWORK' });
+    if (err.code === 'functions/unavailable' || err.code === 'functions/deadline-exceeded') {
+      throw Object.assign(new Error('검색 서버에 연결할 수 없거나 응답 시간이 초과되었습니다.'), { code: 'SEARCH_NETWORK' });
     }
     throw Object.assign(new Error(err.message || '검색 중 오류가 발생했습니다.'), { code: 'SEARCH_ERROR' });
+  } finally {
+    clearTimeout(timerId);
   }
 }

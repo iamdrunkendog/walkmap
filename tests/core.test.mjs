@@ -126,6 +126,14 @@ test('course reference markers: validation, backward compatibility migration, al
   assert.equal(validateMarker({...m,category:cat}).category,cat);
  }
  assert.deepEqual(MARKER_CATEGORIES,['cafe','food','photo','seminar','academy','gallery','book','spot']);
+
+ // Marker color validation
+ assert.equal(validateMarker({...m,color:'#E32219'}).color,'#E32219');
+ assert.equal(validateMarker({...m,color:'#1976D2'}).color,'#1976D2');
+ assert.equal(validateMarker({...m,color:'#fff'}).color,'#fff');
+ assert.throws(()=>validateMarker({...m,color:'blue'}));
+ assert.throws(()=>validateMarker({...m,color:'invalid-hex'}));
+ assert.throws(()=>validateMarker({...m,color:'#1234567890'}));
 });
 
 test('normalizePlace extracts safe https link and sanitized category',()=>{
@@ -251,6 +259,20 @@ test('detachable pin label offsets: validation, bounds enforcement, round-trip a
   assert.equal(dup.visits[0].labelOffsetY, 85);
   assert.equal(dup.markers[0].labelOffsetX, 45);
   assert.equal(dup.markers[0].labelOffsetY, -60);
+
+  // Course summary label offsets & label scale
+  const courseWithSummary = validateCourse({
+    ...valCourse,
+    labelScale: 1.2,
+    summaryLabelOffsetX: 50,
+    summaryLabelOffsetY: -80
+  });
+  assert.equal(courseWithSummary.labelScale, 1.2);
+  assert.equal(courseWithSummary.summaryLabelOffsetX, 50);
+  assert.equal(courseWithSummary.summaryLabelOffsetY, -80);
+  assert.throws(() => validateCourse({ ...valCourse, labelScale: 0.1 }));
+  assert.throws(() => validateCourse({ ...valCourse, summaryLabelOffsetX: 1200 }));
+  assert.throws(() => validateCourse({ ...valCourse, summaryLabelOffsetY: -1200 }));
 
   // Signature captures label offset changes
   const sigOriginal = courseSignature(valCourse);

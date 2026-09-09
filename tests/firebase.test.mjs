@@ -289,7 +289,7 @@ test('Firebase scaffolding and security configuration integrity', () => {
   assert.match(rules, /'cafe',\s*'food',\s*'photo',\s*'seminar',\s*'academy',\s*'gallery',\s*'book',\s*'spot'/);
   assert.match(rules, /m\.naverLink\.matches\('\^https:\/\/\.\+'\)/);
   assert.match(rules, /m\.keys\(\)\.hasAll\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng'\]\)/);
-  assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink',\s*'labelOffsetX',\s*'labelOffsetY',\s*'labelOffset'\]\)/);
+  assert.match(rules, /m\.keys\(\)\.hasOnly\(\['id',\s*'name',\s*'category',\s*'lat',\s*'lng',\s*'address',\s*'naverLink',\s*'labelOffsetX',\s*'labelOffsetY',\s*'labelOffset',\s*'color'\]\)/);
   assert.match(rules, /m\.labelOffsetX\s*>=\s*-500\s*&&\s*m\.labelOffsetX\s*<=\s*500/);
   assert.match(rules, /m\.labelOffsetY\s*>=\s*-500\s*&&\s*m\.labelOffsetY\s*<=\s*500/);
   assert.match(rules, /allow create,\s*update:\s*if request\.auth != null\s*&&\s*request\.auth\.uid == userId\s*&&\s*isValidMarker\(request\.resource\.data\)/);
@@ -491,11 +491,12 @@ test('subcollection markers with label offsets pass validation and persist corre
       if (typeof m.labelOffset.x !== 'number' || m.labelOffset.x < -500 || m.labelOffset.x > 500) return false;
       if (typeof m.labelOffset.y !== 'number' || m.labelOffset.y < -500 || m.labelOffset.y > 500) return false;
     }
+    if ('color' in m && (typeof m.color !== 'string' || m.color.length > 30)) return false;
     const required = ['id', 'name', 'category', 'lat', 'lng'];
     for (const k of required) {
       if (!(k in m)) return false;
     }
-    const allowed = new Set(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink', 'labelOffsetX', 'labelOffsetY', 'labelOffset']);
+    const allowed = new Set(['id', 'name', 'category', 'lat', 'lng', 'address', 'naverLink', 'labelOffsetX', 'labelOffsetY', 'labelOffset', 'color']);
     for (const k of Object.keys(m)) {
       if (!allowed.has(k)) return false;
     }
@@ -511,7 +512,8 @@ test('subcollection markers with label offsets pass validation and persist corre
     lat: 37.5796,
     lng: 126.9770,
     labelOffsetX: 75,
-    labelOffsetY: -120
+    labelOffsetY: -120,
+    color: '#E32219'
   };
 
   // 1. Verify rules schema validation passes
@@ -519,6 +521,7 @@ test('subcollection markers with label offsets pass validation and persist corre
   assert.equal(isValidMarker({ ...marker, category: 'academy' }, mId), true);
   assert.equal(isValidMarker({ ...marker, category: 'gallery' }, mId), true);
   assert.equal(isValidMarker({ ...marker, category: 'book' }, mId), true);
+  assert.equal(isValidMarker({ ...marker, color: '#1976D2' }, mId), true);
   assert.equal(isValidMarker({ ...marker, labelOffsetX: 501 }, mId), false);
   assert.equal(isValidMarker({ ...marker, labelOffsetY: -501 }, mId), false);
   assert.equal(isValidMarker({ ...marker, extraKey: 'forbidden' }, mId), false);

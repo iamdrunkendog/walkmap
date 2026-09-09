@@ -78,8 +78,14 @@ export function validateMarker(m) {
     link = str(m.naverLink, 2000);
     try { const u = new URL(link); if (u.protocol !== 'https:' || u.username || u.password) fail(); } catch { fail(); }
   }
+  let color = undefined;
+  if (m.color !== undefined && m.color !== '') {
+    color = str(m.color, 30);
+    if (!/^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6}|[0-9a-fA-F]{8})$/.test(color)) fail();
+  }
   const res = {id:str(m.id,36,true),...pos(m),name:str(m.name||m.title,100,true),category:cat,address};
   if(link) res.naverLink = link;
+  if(color) res.color = color;
 
   if (m.labelOffsetX !== undefined) res.labelOffsetX = Math.round(number(m.labelOffsetX, -500, 500));
   if (m.labelOffsetY !== undefined) res.labelOffsetY = Math.round(number(m.labelOffsetY, -500, 500));
@@ -121,7 +127,20 @@ export function validateCourse(c) {
   if(new Set(visits.map(v=>v.id)).size!==visits.length) fail();
   const markers=rawMarkers.map(validateMarker);
   if(new Set(markers.map(m=>m.id)).size!==markers.length) fail();
-  return {id:c.id,version:c.version,name:str(c.name,100,true),region:str(c.region,100),tags:c.tags.map(v=>str(v,40,true)),speed:number(c.speed,0.5,10),points:c.points.map(pos),visits,markers};
+
+  let labelScale = undefined;
+  if (c.labelScale !== undefined) {
+    labelScale = number(c.labelScale, 0.5, 3.0);
+  }
+  let summaryLabelOffsetX = undefined, summaryLabelOffsetY = undefined;
+  if (c.summaryLabelOffsetX !== undefined) summaryLabelOffsetX = Math.round(number(c.summaryLabelOffsetX, -1000, 1000));
+  if (c.summaryLabelOffsetY !== undefined) summaryLabelOffsetY = Math.round(number(c.summaryLabelOffsetY, -1000, 1000));
+
+  const resCourse = {id:c.id,version:c.version,name:str(c.name,100,true),region:str(c.region,100),tags:c.tags.map(v=>str(v,40,true)),speed:number(c.speed,0.5,10),points:c.points.map(pos),visits,markers};
+  if (labelScale !== undefined) resCourse.labelScale = labelScale;
+  if (summaryLabelOffsetX !== undefined) resCourse.summaryLabelOffsetX = summaryLabelOffsetX;
+  if (summaryLabelOffsetY !== undefined) resCourse.summaryLabelOffsetY = summaryLabelOffsetY;
+  return resCourse;
 }
 
 export function courseSignature(course) {
